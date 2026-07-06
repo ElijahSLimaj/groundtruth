@@ -30,7 +30,7 @@ supabase test db
 
 Application services connect as the `brain_app` role and set `app.tenant_id` per session. Row level security enforces tenant isolation on every table; `events` and `audit_log` are append-only because `brain_app` holds no update or delete grants on them. Cross-tenant isolation is asserted by the pgTAP suite in `supabase/tests`, which blocks merge in CI.
 
-The ingestion worker connects as `brain_worker`, a separate role that owns the operational queue: full access to `ingestion_queue` and `ingestion_dlq` across tenants, insert-only on `events` with the tenant checked by RLS per item, and no read access to anything else. `brain_app` has no grants on the queue tables, so serving code can never see raw queue payloads. Duplicate delivery is absorbed by the idempotency unique constraint; the worker treats a unique violation as a counted no-op rather than using `ON CONFLICT`, which under RLS would require select privileges the worker should not hold.
+The ingestion worker connects as `brain_worker`, a separate role that owns the operational queue: full access to `ingestion_queue`, `ingestion_dlq`, and `connector_state` across tenants, read access to `connectors` plus a column grant to flip `status`, insert-only on `events` with the tenant checked by RLS per item, and no read access to anything else. `brain_app` has no grants on the queue tables, so serving code can never see raw queue payloads. Duplicate delivery is absorbed by the idempotency unique constraint; the worker treats a unique violation as a counted no-op rather than using `ON CONFLICT`, which under RLS would require select privileges the worker should not hold.
 
 ## Schema deviations from the spec
 

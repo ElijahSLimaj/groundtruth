@@ -3,92 +3,21 @@ package store
 import (
 	"context"
 	"errors"
-	"os"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/attempttechnologies/company-brain/services/ingestion/connector"
+	"github.com/attempttechnologies/company-brain/services/ingestion/internal/testdb"
 )
 
-func testPools(t *testing.T) (worker, admin *pgxpool.Pool) {
-	t.Helper()
-	url := os.Getenv("TEST_DATABASE_URL")
-	if url == "" {
-		t.Skip("TEST_DATABASE_URL not set, skipping database integration tests")
-	}
-	ctx := context.Background()
-
-	workerCfg, err := pgxpool.ParseConfig(url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	workerCfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
-		_, err := conn.Exec(ctx, "set role brain_worker")
-		return err
-	}
-	worker, err = pgxpool.NewWithConfig(ctx, workerCfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(worker.Close)
-
-	admin, err = pgxpool.New(ctx, url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(admin.Close)
-	return worker, admin
-}
-
-type fixture struct {
-	tenantID    uuid.UUID
-	connectorID uuid.UUID
-}
-
-func createFixture(t *testing.T, admin *pgxpool.Pool) fixture {
-	t.Helper()
-	ctx := context.Background()
-	f := fixture{tenantID: uuid.New(), connectorID: uuid.New()}
-
-	_, err := admin.Exec(ctx,
-		`insert into tenants (id, name, tier) values ($1, $2, 'growth')`,
-		f.tenantID, "test-"+f.tenantID.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = admin.Exec(ctx,
-		`insert into connectors (id, tenant_id, source_type, status, config) values ($1, $2, 'slack', 'live', '{}')`,
-		f.connectorID, f.tenantID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	t.Cleanup(func() {
-		ctx := context.Background()
-		for _, stmt := range []string{
-			`delete from ingestion_dlq where tenant_id = $1`,
-			`delete from ingestion_queue where tenant_id = $1`,
-			`delete from events where tenant_id = $1`,
-			`delete from connectors where tenant_id = $1`,
-			`delete from tenants where id = $1`,
-		} {
-			if _, err := admin.Exec(ctx, stmt, f.tenantID); err != nil {
-				t.Errorf("cleanup failed: %v", err)
-			}
-		}
-	})
-	return f
-}
-
-func (f fixture) event() connector.NormalizedEvent {
+func eventFor(f testdb.Fixture) connector.NormalizedEvent {
 	return connector.NormalizedEvent{
-		TenantID:    f.tenantID,
-		ConnectorID: f.connectorID,
+		TenantID:    f.TenantID,
+		ConnectorID: f.ConnectorID,
 		SourceType:  "slack",
 		ExternalID:  uuid.NewString(),
 		ThreadKey:   "thread-1",
@@ -109,43 +38,13 @@ func newProcessor(t *testing.T, worker *pgxpool.Pool) *Processor {
 	}
 }
 
-func dlqReasons(t *testing.T, admin *pgxpool.Pool, tenantID uuid.UUID) []string {
-	t.Helper()
-	rows, err := admin.Query(context.Background(),
-		`select reason from ingestion_dlq where tenant_id = $1`, tenantID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-	var reasons []string
-	for rows.Next() {
-		var r string
-		if err := rows.Scan(&r); err != nil {
-			t.Fatal(err)
-		}
-		reasons = append(reasons, r)
-	}
-	return reasons
-}
-
-func countRows(t *testing.T, admin *pgxpool.Pool, table string, tenantID uuid.UUID) int {
-	t.Helper()
-	var n int
-	err := admin.QueryRow(context.Background(),
-		`select count(*) from `+table+` where tenant_id = $1`, tenantID).Scan(&n)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return n
-}
-
 func TestProcessWritesEventAndAcks(t *testing.T) {
-	worker, admin := testPools(t)
-	f := createFixture(t, admin)
+	worker, admin := testdb.Pools(t)
+	f := testdb.CreateFixture(t, admin)
 	p := newProcessor(t, worker)
 	ctx := context.Background()
 
-	ev := f.event()
+	ev := eventFor(f)
 	if err := Enqueue(ctx, worker, ev); err != nil {
 		t.Fatal(err)
 	}
@@ -155,12 +54,13 @@ func TestProcessWritesEventAndAcks(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !found || outcome != OutcomeWritten {
-		t.Fatalf("expected written, got found=%v outcome=%q dlq=%v", found, outcome, dlqReasons(t, admin, f.tenantID))
+		t.Fatalf("expected written, got found=%v outcome=%q dlq=%v",
+			found, outcome, testdb.DLQReasons(t, admin, f.TenantID))
 	}
 
 	var externalID, payloadRef string
 	err = admin.QueryRow(ctx,
-		`select external_id, payload_ref from events where tenant_id = $1`, f.tenantID,
+		`select external_id, payload_ref from events where tenant_id = $1`, f.TenantID,
 	).Scan(&externalID, &payloadRef)
 	if err != nil {
 		t.Fatal(err)
@@ -171,18 +71,18 @@ func TestProcessWritesEventAndAcks(t *testing.T) {
 	if payloadRef == "" {
 		t.Fatal("expected a payload ref")
 	}
-	if n := countRows(t, admin, "ingestion_queue", f.tenantID); n != 0 {
+	if n := testdb.CountRows(t, admin, "ingestion_queue", f.TenantID); n != 0 {
 		t.Fatalf("expected empty queue, found %d rows", n)
 	}
 }
 
 func TestDuplicateDeliveryIsCountedNoOp(t *testing.T) {
-	worker, admin := testPools(t)
-	f := createFixture(t, admin)
+	worker, admin := testdb.Pools(t)
+	f := testdb.CreateFixture(t, admin)
 	p := newProcessor(t, worker)
 	ctx := context.Background()
 
-	ev := f.event()
+	ev := eventFor(f)
 	for range 2 {
 		if err := Enqueue(ctx, worker, ev); err != nil {
 			t.Fatal(err)
@@ -196,21 +96,21 @@ func TestDuplicateDeliveryIsCountedNoOp(t *testing.T) {
 	if result.Written != 1 || result.Duplicates != 1 {
 		t.Fatalf("expected 1 written and 1 duplicate, got %+v", result)
 	}
-	if n := countRows(t, admin, "events", f.tenantID); n != 1 {
+	if n := testdb.CountRows(t, admin, "events", f.TenantID); n != 1 {
 		t.Fatalf("expected exactly one event, got %d", n)
 	}
-	if n := countRows(t, admin, "ingestion_queue", f.tenantID); n != 0 {
+	if n := testdb.CountRows(t, admin, "ingestion_queue", f.TenantID); n != 0 {
 		t.Fatalf("expected empty queue, found %d rows", n)
 	}
 }
 
 func TestInvalidACLGoesToDeadLetter(t *testing.T) {
-	worker, admin := testPools(t)
-	f := createFixture(t, admin)
+	worker, admin := testdb.Pools(t)
+	f := testdb.CreateFixture(t, admin)
 	p := newProcessor(t, worker)
 	ctx := context.Background()
 
-	ev := f.event()
+	ev := eventFor(f)
 	ev.ACL = connector.ACL{Scope: connector.ACLScopePrincipals}
 	if err := Enqueue(ctx, worker, ev); err != nil {
 		t.Fatal(err)
@@ -224,28 +124,23 @@ func TestInvalidACLGoesToDeadLetter(t *testing.T) {
 		t.Fatalf("expected dead letter, got %q", outcome)
 	}
 
-	var reason string
-	err = admin.QueryRow(ctx,
-		`select reason from ingestion_dlq where tenant_id = $1`, f.tenantID).Scan(&reason)
-	if err != nil {
-		t.Fatal(err)
+	reasons := testdb.DLQReasons(t, admin, f.TenantID)
+	if len(reasons) != 1 || reasons[0] != "invalid event: acl_principals_empty" {
+		t.Fatalf("unexpected reasons %v", reasons)
 	}
-	if reason != "invalid event: acl_principals_empty" {
-		t.Fatalf("unexpected reason %q", reason)
-	}
-	if n := countRows(t, admin, "events", f.tenantID); n != 0 {
+	if n := testdb.CountRows(t, admin, "events", f.TenantID); n != 0 {
 		t.Fatalf("invalid event must never reach events, found %d rows", n)
 	}
 }
 
 func TestMalformedQueuePayloadGoesToDeadLetter(t *testing.T) {
-	worker, admin := testPools(t)
-	f := createFixture(t, admin)
+	worker, admin := testdb.Pools(t)
+	f := testdb.CreateFixture(t, admin)
 	p := newProcessor(t, worker)
 	ctx := context.Background()
 
 	_, err := admin.Exec(ctx,
-		`insert into ingestion_queue (tenant_id, event) values ($1, '"garbage"')`, f.tenantID)
+		`insert into ingestion_queue (tenant_id, event) values ($1, '"garbage"')`, f.TenantID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,24 +152,24 @@ func TestMalformedQueuePayloadGoesToDeadLetter(t *testing.T) {
 	if outcome != OutcomeDeadLettered {
 		t.Fatalf("expected dead letter, got %q", outcome)
 	}
-	if n := countRows(t, admin, "ingestion_dlq", f.tenantID); n != 1 {
+	if n := testdb.CountRows(t, admin, "ingestion_dlq", f.TenantID); n != 1 {
 		t.Fatalf("expected one dead letter, got %d", n)
 	}
 }
 
 func TestTenantMismatchGoesToDeadLetter(t *testing.T) {
-	worker, admin := testPools(t)
-	fA := createFixture(t, admin)
-	fB := createFixture(t, admin)
+	worker, admin := testdb.Pools(t)
+	fA := testdb.CreateFixture(t, admin)
+	fB := testdb.CreateFixture(t, admin)
 	p := newProcessor(t, worker)
 	ctx := context.Background()
 
-	ev := fA.event()
+	ev := eventFor(fA)
 	if err := Enqueue(ctx, worker, ev); err != nil {
 		t.Fatal(err)
 	}
 	_, err := admin.Exec(ctx,
-		`update ingestion_queue set tenant_id = $1 where tenant_id = $2`, fB.tenantID, fA.tenantID)
+		`update ingestion_queue set tenant_id = $1 where tenant_id = $2`, fB.TenantID, fA.TenantID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -287,27 +182,22 @@ func TestTenantMismatchGoesToDeadLetter(t *testing.T) {
 		t.Fatalf("expected dead letter, got %q", outcome)
 	}
 
-	var reason string
-	err = admin.QueryRow(ctx,
-		`select reason from ingestion_dlq where tenant_id = $1`, fB.tenantID).Scan(&reason)
-	if err != nil {
-		t.Fatal(err)
+	reasons := testdb.DLQReasons(t, admin, fB.TenantID)
+	if len(reasons) != 1 || reasons[0] != "tenant_mismatch" {
+		t.Fatalf("unexpected reasons %v", reasons)
 	}
-	if reason != "tenant_mismatch" {
-		t.Fatalf("unexpected reason %q", reason)
-	}
-	if n := countRows(t, admin, "events", fA.tenantID); n != 0 {
+	if n := testdb.CountRows(t, admin, "events", fA.TenantID); n != 0 {
 		t.Fatalf("mismatched event must not be written, found %d rows", n)
 	}
 }
 
 func TestUnknownConnectorGoesToDeadLetter(t *testing.T) {
-	worker, admin := testPools(t)
-	f := createFixture(t, admin)
+	worker, admin := testdb.Pools(t)
+	f := testdb.CreateFixture(t, admin)
 	p := newProcessor(t, worker)
 	ctx := context.Background()
 
-	ev := f.event()
+	ev := eventFor(f)
 	ev.ConnectorID = uuid.New()
 	if err := Enqueue(ctx, worker, ev); err != nil {
 		t.Fatal(err)
@@ -320,7 +210,7 @@ func TestUnknownConnectorGoesToDeadLetter(t *testing.T) {
 	if outcome != OutcomeDeadLettered {
 		t.Fatalf("expected dead letter, got %q", outcome)
 	}
-	if n := countRows(t, admin, "ingestion_dlq", f.tenantID); n != 1 {
+	if n := testdb.CountRows(t, admin, "ingestion_dlq", f.TenantID); n != 1 {
 		t.Fatalf("expected one dead letter, got %d", n)
 	}
 }
@@ -334,8 +224,8 @@ func (s failingPayloadStore) Put(context.Context, uuid.UUID, []byte) (string, er
 }
 
 func TestTransientFailureRetriesThenDeadLetters(t *testing.T) {
-	worker, admin := testPools(t)
-	f := createFixture(t, admin)
+	worker, admin := testdb.Pools(t)
+	f := testdb.CreateFixture(t, admin)
 	ctx := context.Background()
 	p := &Processor{
 		Pool:        worker,
@@ -344,7 +234,7 @@ func TestTransientFailureRetriesThenDeadLetters(t *testing.T) {
 		Backoff:     func(int) time.Duration { return 0 },
 	}
 
-	if err := Enqueue(ctx, worker, f.event()); err != nil {
+	if err := Enqueue(ctx, worker, eventFor(f)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -359,7 +249,7 @@ func TestTransientFailureRetriesThenDeadLetters(t *testing.T) {
 		var attempts int
 		var lastError string
 		err = admin.QueryRow(ctx,
-			`select attempts, last_error from ingestion_queue where tenant_id = $1`, f.tenantID,
+			`select attempts, last_error from ingestion_queue where tenant_id = $1`, f.TenantID,
 		).Scan(&attempts, &lastError)
 		if err != nil {
 			t.Fatal(err)
@@ -379,19 +269,19 @@ func TestTransientFailureRetriesThenDeadLetters(t *testing.T) {
 	if outcome != OutcomeDeadLettered {
 		t.Fatalf("expected dead letter after max attempts, got %q", outcome)
 	}
-	if n := countRows(t, admin, "ingestion_queue", f.tenantID); n != 0 {
+	if n := testdb.CountRows(t, admin, "ingestion_queue", f.TenantID); n != 0 {
 		t.Fatalf("expected empty queue, found %d rows", n)
 	}
 }
 
 func TestConcurrentWorkersDrainQueueExactlyOnce(t *testing.T) {
-	worker, admin := testPools(t)
-	f := createFixture(t, admin)
+	worker, admin := testdb.Pools(t)
+	f := testdb.CreateFixture(t, admin)
 	ctx := context.Background()
 	const total = 10
 
 	for range total {
-		if err := Enqueue(ctx, worker, f.event()); err != nil {
+		if err := Enqueue(ctx, worker, eventFor(f)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -425,10 +315,10 @@ func TestConcurrentWorkersDrainQueueExactlyOnce(t *testing.T) {
 	if combined.Written != total || combined.Duplicates != 0 {
 		t.Fatalf("expected %d written with no duplicates, got %+v", total, combined)
 	}
-	if n := countRows(t, admin, "events", f.tenantID); n != total {
+	if n := testdb.CountRows(t, admin, "events", f.TenantID); n != total {
 		t.Fatalf("expected %d events, got %d", total, n)
 	}
-	if n := countRows(t, admin, "ingestion_queue", f.tenantID); n != 0 {
+	if n := testdb.CountRows(t, admin, "ingestion_queue", f.TenantID); n != 0 {
 		t.Fatalf("expected empty queue, found %d rows", n)
 	}
 }
