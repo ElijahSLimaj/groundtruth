@@ -73,23 +73,23 @@ type Health struct {
 }
 
 type AuthorRef struct {
-	PersonID  *uuid.UUID
-	SourceRef string
+	PersonID  *uuid.UUID `json:"person_id,omitempty"`
+	SourceRef string     `json:"source_ref,omitempty"`
 }
 
 type Payload struct {
-	Body      string
-	Structure map[string]any
+	Body      string         `json:"body"`
+	Structure map[string]any `json:"structure,omitempty"`
 }
 
 type NormalizedEvent struct {
-	TenantID    uuid.UUID
-	ConnectorID uuid.UUID
-	SourceType  string
-	ExternalID  string
-	AuthorRef   AuthorRef
-	ThreadKey   string
-	OccurredAt  time.Time
-	ACL         ACL
-	Payload     Payload
+	TenantID    uuid.UUID `json:"tenant_id"`
+	ConnectorID uuid.UUID `json:"connector_id"`
+	SourceType  string    `json:"source_type"`
+	ExternalID  string    `json:"external_id"`
+	AuthorRef   AuthorRef `json:"author_ref"`
+	ThreadKey   string    `json:"thread_key,omitempty"`
+	OccurredAt  time.Time `json:"occurred_at"`
+	ACL         ACL       `json:"acl"`
+	Payload     Payload   `json:"payload"`
 }

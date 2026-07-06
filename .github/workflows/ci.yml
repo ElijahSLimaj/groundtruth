@@ -51,9 +51,9 @@ jobs:
           go install honnef.co/go/tools/cmd/staticcheck@latest
           (cd services/ingestion && staticcheck ./...)
           (cd services/embedding && staticcheck ./...)
-      - run: go test ./...
+      - run: go test -race ./...
         working-directory: services/ingestion
-      - run: go test ./...
+      - run: go test -race ./...
         working-directory: services/embedding
 
   database:
@@ -67,3 +67,12 @@ jobs:
         run: supabase db start
       - name: RLS isolation suite, blocks merge unconditionally
         run: supabase test db
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: services/*/go.sum
+      - name: Ingestion integration tests
+        run: go test -race ./...
+        working-directory: services/ingestion
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
