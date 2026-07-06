@@ -1,0 +1,30 @@
+{
+  "external_id": "C0DEPLOYS:1751886000.000300",
+  "acl": {
+    "scope": "tenant",
+    "source_scope": {
+      "type": "slack_channel",
+      "id": "C0DEPLOYS",
+      "visibility": "public"
+    }
+  },
+  "envelope": {
+    "channel": {
+      "id": "C0DEPLOYS",
+      "name": "deploys"
+    },
+    "message": {
+      "type": "message",
+      "subtype": "bot_message",
+      "ts": "1751886000.000300",
+      "bot_id": "B01CI",
+      "text": "Release 2.14 deployed to production",
+      "attachments": [
+        {
+          "title": "release-2.14",
+          "text": "12 commits, migration 0042 applied"
+        }
+      ]
+    }
+  }
+}

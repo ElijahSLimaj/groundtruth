@@ -1,0 +1,26 @@
+{
+  "external_id": "P0FOUNDERS:1751799600.000200",
+  "acl": {
+    "scope": "principals",
+    "principals": ["slack:U01FOUNDER", "slack:U02SALES"],
+    "source_scope": {
+      "type": "slack_channel",
+      "id": "P0FOUNDERS",
+      "visibility": "private"
+    }
+  },
+  "envelope": {
+    "channel": {
+      "id": "P0FOUNDERS",
+      "name": "founders"
+    },
+    "message": {
+      "type": "message",
+      "ts": "1751799600.000200",
+      "thread_ts": "1751713200.000100",
+      "user": "U01FOUNDER",
+      "text": "Agreed, and we raise Growth to 1799 from August",
+      "team": "T01ACME"
+    }
+  }
+}

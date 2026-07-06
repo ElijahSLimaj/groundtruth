@@ -1,0 +1,35 @@
+{
+  "tenant_id": "11111111-1111-1111-1111-111111111111",
+  "connector_id": "33333333-0000-0000-0000-000000000001",
+  "source_type": "slack",
+  "external_id": "C0SALES:1751713200.000100",
+  "author_ref": {
+    "source_ref": "slack:U02SALES"
+  },
+  "thread_key": "C0SALES:1751713200.000100",
+  "occurred_at": "2025-07-05T11:00:00.0001Z",
+  "acl": {
+    "scope": "tenant",
+    "source_scope": {
+      "type": "slack_channel",
+      "id": "C0SALES",
+      "visibility": "public"
+    }
+  },
+  "payload": {
+    "body": "Closed the Meridian deal at 1499 per month, annual billing",
+    "structure": {
+      "channel": {
+        "id": "C0SALES",
+        "name": "sales"
+      },
+      "message": {
+        "team": "T01ACME",
+        "text": "Closed the Meridian deal at 1499 per month, annual billing",
+        "ts": "1751713200.000100",
+        "type": "message",
+        "user": "U02SALES"
+      }
+    }
+  }
+}

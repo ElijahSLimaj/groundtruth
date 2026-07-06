@@ -1,0 +1,24 @@
+{
+  "external_id": "C0SALES:1751713200.000100",
+  "acl": {
+    "scope": "tenant",
+    "source_scope": {
+      "type": "slack_channel",
+      "id": "C0SALES",
+      "visibility": "public"
+    }
+  },
+  "envelope": {
+    "channel": {
+      "id": "C0SALES",
+      "name": "sales"
+    },
+    "message": {
+      "type": "message",
+      "ts": "1751713200.000100",
+      "user": "U02SALES",
+      "text": "Closed the Meridian deal at 1499 per month, annual billing",
+      "team": "T01ACME"
+    }
+  }
+}
