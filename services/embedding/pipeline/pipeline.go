@@ -27,9 +27,10 @@ type Pipeline struct {
 }
 
 type Result struct {
-	EventsScanned int
-	ChunksWritten int
-	DeadLettered  int
+	EventsScanned      int
+	ChunksWritten      int
+	DeadLettered       int
+	StatementsEmbedded int
 }
 
 type scannedEvent struct {
@@ -66,6 +67,12 @@ func (p *Pipeline) Run(ctx context.Context) (Result, error) {
 	var result Result
 	model := p.Provider.ModelID()
 
+	embedded, err := p.embedStatements(ctx, model)
+	if err != nil {
+		return result, err
+	}
+	result.StatementsEmbedded = embedded
+
 	wmTime, wmID, err := p.loadWatermark(ctx, model)
 	if err != nil {
 		return result, err
@@ -99,6 +106,64 @@ func (p *Pipeline) Run(ctx context.Context) (Result, error) {
 		return result, err
 	}
 	return result, nil
+}
+
+func (p *Pipeline) embedStatements(ctx context.Context, model string) (int, error) {
+	rows, err := p.Pool.Query(ctx, `
+		select cv.id, cv.tenant_id, cv.statement
+		from canon_versions cv
+		join canon_entries ce on ce.current_version_id = cv.id
+		where ce.status in ('active', 'decayed')
+		  and not exists (
+		    select 1 from canon_statement_embeddings cse
+		    where cse.version_id = cv.id and cse.embedding_model = $1
+		  )
+		limit 200
+	`, model)
+	if err != nil {
+		return 0, fmt.Errorf("scan statements: %w", err)
+	}
+	defer rows.Close()
+
+	type statement struct {
+		versionID uuid.UUID
+		tenantID  uuid.UUID
+		text      string
+	}
+	var statements []statement
+	for rows.Next() {
+		var s statement
+		if err := rows.Scan(&s.versionID, &s.tenantID, &s.text); err != nil {
+			return 0, fmt.Errorf("scan statement row: %w", err)
+		}
+		statements = append(statements, s)
+	}
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("scan statements: %w", err)
+	}
+	if len(statements) == 0 {
+		return 0, nil
+	}
+
+	texts := make([]string, len(statements))
+	for i, s := range statements {
+		texts[i] = s.text
+	}
+	vectors, err := p.Provider.Embed(ctx, texts)
+	if err != nil {
+		return 0, fmt.Errorf("embed statements: %w", err)
+	}
+
+	for i, s := range statements {
+		if _, err := p.Pool.Exec(ctx, `
+			insert into canon_statement_embeddings (version_id, embedding_model, tenant_id, embedding)
+			values ($1, $2, $3, $4::extensions.vector)
+			on conflict (version_id, embedding_model) do nothing
+		`, s.versionID, model, s.tenantID, vectorLiteral(vectors[i])); err != nil {
+			return 0, fmt.Errorf("insert statement embedding: %w", err)
+		}
+	}
+	return len(statements), nil
 }
 
 func (p *Pipeline) loadWatermark(ctx context.Context, model string) (time.Time, uuid.UUID, error) {

@@ -76,6 +76,7 @@ func CreateFixture(t *testing.T, admin *pgxpool.Pool, payloadRoot string) Fixtur
 			`delete from event_chunks where tenant_id = $1`,
 			`delete from events where tenant_id = $1`,
 			`delete from connectors where tenant_id = $1`,
+			`delete from people where tenant_id = $1`,
 			`delete from tenants where id = $1`,
 		} {
 			if _, err := admin.Exec(ctx, stmt, f.TenantID); err != nil {
@@ -111,7 +112,12 @@ func AppPool(t *testing.T) *pgxpool.Pool {
 func CleanupWatermark(t *testing.T, admin *pgxpool.Pool, model string) {
 	t.Helper()
 	t.Cleanup(func() {
-		if _, err := admin.Exec(context.Background(),
+		ctx := context.Background()
+		if _, err := admin.Exec(ctx,
+			`delete from canon_statement_embeddings where embedding_model = $1`, model); err != nil {
+			t.Errorf("statement embedding cleanup failed: %v", err)
+		}
+		if _, err := admin.Exec(ctx,
 			`delete from embedding_watermark where embedding_model = $1`, model); err != nil {
 			t.Errorf("watermark cleanup failed: %v", err)
 		}
