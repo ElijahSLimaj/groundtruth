@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/attempttechnologies/company-brain/services/ingestion/connector"
+	"github.com/attempttechnologies/company-brain/services/ingestion/gmail"
 	"github.com/attempttechnologies/company-brain/services/ingestion/internal/config"
 	"github.com/attempttechnologies/company-brain/services/ingestion/runtime"
 	"github.com/attempttechnologies/company-brain/services/ingestion/slack"
@@ -45,10 +46,17 @@ func run(logger *slog.Logger) error {
 	defer pool.Close()
 
 	slackConnector := slack.New(func(token string) slack.API { return slack.NewClient(token) })
+	gmailConnector := gmail.New(func(token string) gmail.API { return gmail.NewClient(token) })
 	runner := &runtime.Runner{
-		Pool:        pool,
-		Connectors:  map[string]connector.Connector{slack.SourceType: slackConnector},
-		Normalizers: map[string]runtime.Normalizer{slack.SourceType: slack.Normalizer{}},
+		Pool: pool,
+		Connectors: map[string]connector.Connector{
+			slack.SourceType: slackConnector,
+			gmail.SourceType: gmailConnector,
+		},
+		Normalizers: map[string]runtime.Normalizer{
+			slack.SourceType: slack.Normalizer{},
+			gmail.SourceType: gmail.Normalizer{},
+		},
 	}
 	processor := &store.Processor{
 		Pool:     pool,
