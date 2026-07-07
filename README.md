@@ -19,12 +19,14 @@ Requires Node 22+, pnpm, Go 1.25+, Docker, Supabase CLI.
 
 ```sh
 pnpm install
-supabase start
-supabase migration up
-supabase test db
+bin/dev.sh
 ```
 
-`supabase status` prints local URLs and keys. Seed data lives in `supabase/seed.sql` and loads on `supabase db reset` or fresh start.
+`bin/dev.sh` starts the Supabase stack, applies migrations, and runs all four services: ingestion and embedding daemons (Go), the serving API with the scheduler on port 3001, and the web app on port 3000. `supabase status` prints local URLs and keys. Seed data lives in `supabase/seed.sql` and loads on a fresh stack. Each service also ships a Dockerfile for the promote-the-artifact deploy flow in spec section 9.
+
+Verification: `supabase test db` (pgTAP suites), `go test -race ./...` per Go service with `TEST_DATABASE_URL`, `pnpm -r lint && pnpm -r typecheck && pnpm -r test`, and `pnpm --filter @company-brain/serving test:e2e` for the HTTP suites.
+
+Key environment variables: `DATABASE_URL` and `PAYLOAD_ROOT` everywhere; `ANTHROPIC_API_KEY`, `DRIFT_TIER2_MODEL`, `DRIFT_TIER3_MODEL`, and `SCHEDULER_ENABLED=1` for the drift engine and synthesis; `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, `SLACK_APPROVAL_CHANNEL`, and `SLACK_TENANT_ID` for the Slack approval app; `DEV_TENANT_ID` and `DEV_PERSON_ID` for the web dev-auth shim. Every LLM-dependent feature reports itself disabled rather than failing when its key is absent.
 
 ## Database access model
 
