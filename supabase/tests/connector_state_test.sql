@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(7);
+select plan(8);
 
 insert into tenants (id, name, tier) values
   ('00000000-0000-0000-0000-00000000000a', 'Tenant A', 'growth'),
@@ -51,11 +51,17 @@ select throws_ok(
 reset role;
 set local role brain_app;
 
-select throws_ok(
-  $$select count(*) from connector_state$$,
-  '42501',
-  null,
-  'app role cannot read cursors'
+select is(
+  (select count(*) from connector_state),
+  0::bigint,
+  'app role sees no cursors without tenant context'
+);
+
+select set_config('app.tenant_id', '00000000-0000-0000-0000-00000000000a', true);
+select is(
+  (select count(*) from connector_state),
+  1::bigint,
+  'app role reads only its own tenant cursors'
 );
 
 select * from finish();

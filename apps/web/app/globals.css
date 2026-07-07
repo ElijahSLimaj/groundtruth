@@ -1,26 +1,84 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@theme {
+  --color-*: initial;
+  --color-void: #0a0d14;
+  --color-surface: #10141d;
+  --color-raised: #161b27;
+  --color-line: #232a38;
+  --color-line-strong: #303948;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-ink: #e8eaf0;
+  --color-ink-secondary: #9aa3b5;
+  --color-ink-muted: #5e687c;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-verified: #e8b04b;
+  --color-stale: #a08850;
+  --color-stream: #6b87a8;
+  --color-conflict: #e5484d;
+  --color-nocover: #5e687c;
+
+  --color-action: #7b9ef8;
+  --color-positive: #4caf8e;
+
+  --font-display: var(--font-archivo);
+  --font-sans: var(--font-instrument);
+  --font-mono: var(--font-jetbrains);
+
+  --text-*: initial;
+  --text-xs: 0.8125rem;
+  --text-sm: 0.9375rem;
+  --text-base: 0.9375rem;
+  --text-md: 1.0625rem;
+  --text-lg: 1.375rem;
+  --text-xl: 1.75rem;
+  --text-2xl: 2.5rem;
+
+  --radius-*: initial;
+  --radius-control: 6px;
+  --radius-card: 10px;
+  --radius-full: 9999px;
+
+  --shadow-panel: 0 4px 24px rgba(0, 0, 0, 0.4);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-void);
+  color: var(--color-ink);
+  font-family: var(--font-sans), sans-serif;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+.eyebrow {
+  font-family: var(--font-jetbrains), monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+@keyframes receipt-trace {
+  from {
+    max-height: 0;
+    opacity: 0;
+  }
+  to {
+    max-height: 400px;
+    opacity: 1;
+  }
+}
+
+.receipt-trace {
+  animation: receipt-trace 300ms ease-out;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .receipt-trace {
+    animation: none;
+  }
+  * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }
