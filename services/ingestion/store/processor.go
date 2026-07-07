@@ -179,12 +179,12 @@ func insertEvent(ctx context.Context, tx pgx.Tx, ev connector.NormalizedEvent, p
 	_, err = sp.Exec(ctx, `
 		insert into events (
 			tenant_id, connector_id, source_type, external_id,
-			author_id, thread_key, occurred_at, acl, payload_ref
+			author_id, author_source_ref, thread_key, occurred_at, acl, payload_ref
 		)
-		values ($1, $2, $3, $4, $5, nullif($6, ''), $7, $8, $9)
+		values ($1, $2, $3, $4, $5, nullif($6, ''), nullif($7, ''), $8, $9, $10)
 	`,
 		ev.TenantID, ev.ConnectorID, ev.SourceType, ev.ExternalID,
-		ev.AuthorRef.PersonID, ev.ThreadKey, ev.OccurredAt, acl, payloadRef,
+		ev.AuthorRef.PersonID, ev.AuthorRef.SourceRef, ev.ThreadKey, ev.OccurredAt, acl, payloadRef,
 	)
 	if err != nil {
 		sp.Rollback(ctx)
