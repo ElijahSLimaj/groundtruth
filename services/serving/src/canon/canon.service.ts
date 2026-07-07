@@ -1,6 +1,8 @@
 import {
   ForbiddenException,
+  Inject,
   Injectable,
+  Logger,
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
@@ -8,13 +10,26 @@ import { PoolClient } from 'pg';
 
 import { DatabaseService } from '../database/database.service';
 import { Principal } from '../auth/principal';
+import { LLM_CLIENT } from '../drift/llm';
+import type { LlmClient } from '../drift/llm';
+import { SERVING_CONFIG } from '../config';
+import type { ServingConfig } from '../config';
+import { EMBEDDER, vectorLiteral } from './embedder';
+import type { Embedder } from './embedder';
 import {
   CanonCitation,
   ConflictSummary,
   ProposeUpdateDto,
   QueryRequestDto,
   QueryResponse,
+  StreamCitation,
 } from './dto';
+import {
+  SYNTHESIS_PROMPT_VERSION,
+  SYNTHESIS_SYSTEM,
+  SynthesisResult,
+  synthesisUserPrompt,
+} from './synthesis';
 import { deriveTrust } from './trust';
 
 const NO_COVERAGE_ANSWER = 'No governed knowledge covers this question.';
@@ -31,7 +46,14 @@ interface CitationRow {
 
 @Injectable()
 export class CanonService {
-  constructor(private readonly db: DatabaseService) {}
+  private readonly logger = new Logger(CanonService.name);
+
+  constructor(
+    private readonly db: DatabaseService,
+    @Inject(LLM_CLIENT) private readonly llm: LlmClient,
+    @Inject(EMBEDDER) private readonly embedder: Embedder,
+    @Inject(SERVING_CONFIG) private readonly config: ServingConfig,
+  ) {}
 
   async query(
     principal: Principal,
@@ -78,7 +100,6 @@ export class CanonService {
         cited.rows.map((row) => row.entry_id),
       );
 
-      const trust = deriveTrust(cited.rows.map((row) => row.entry_status));
       const decayedUsed = cited.rows.filter(
         (row) => row.entry_status === 'decayed',
       ).length;
@@ -86,11 +107,44 @@ export class CanonService {
         .map((row) => row.verified_at)
         .filter((d): d is Date => d !== null);
 
-      const response: QueryResponse = {
-        answer:
-          citations.length > 0 ? citations[0].statement : NO_COVERAGE_ANSWER,
-        trust,
+      let streamCitations: StreamCitation[] = [];
+      let retrievalDegraded = false;
+      if (dto.include_stream && citations.length === 0) {
+        try {
+          streamCitations = await this.streamFallback(
+            client,
+            principal,
+            dto.question,
+            maxCitations,
+          );
+        } catch (error) {
+          retrievalDegraded = true;
+          this.logger.warn(
+            JSON.stringify({
+              event: 'stream_retrieval_degraded',
+              error: String(error),
+            }),
+          );
+        }
+      }
+
+      const trust =
+        citations.length > 0
+          ? deriveTrust(cited.rows.map((row) => row.entry_status))
+          : streamCitations.length > 0
+            ? 'stream_only'
+            : 'no_coverage';
+
+      const answer = await this.composeAnswer(
+        dto.question,
         citations,
+        streamCitations,
+      );
+
+      const response: QueryResponse = {
+        answer,
+        trust,
+        citations: [...citations, ...streamCitations],
         conflicts,
         freshness: {
           oldest_citation:
@@ -102,14 +156,92 @@ export class CanonService {
           decayed_entries_used: decayedUsed,
         },
       };
+      if (retrievalDegraded) {
+        response.retrieval_degraded = true;
+      }
 
       await this.audit(client, principal, 'serving.query', {
         tool: 'query',
         entry_ids: cited.rows.map((row) => row.entry_id),
+        stream_chunks: streamCitations.map((c) => c.chunk_id),
         trust,
       });
       return response;
     });
+  }
+
+  private async streamFallback(
+    client: PoolClient,
+    principal: Principal,
+    question: string,
+    maxCitations: number,
+  ): Promise<StreamCitation[]> {
+    const embedding = await this.embedder.embed(question);
+    const rows = await client.query<{
+      chunk_id: string;
+      chunk_event_id: string;
+      chunk_content: string;
+      chunk_occurred_at: Date | null;
+    }>(
+      `select chunk_id, chunk_event_id, chunk_content, chunk_occurred_at
+       from public.stream_search($1::extensions.vector, $2, $3, $4, $5)`,
+      [
+        vectorLiteral(embedding),
+        question,
+        this.embedder.modelId,
+        principal.principals,
+        maxCitations,
+      ],
+    );
+    return rows.rows.map((row) => ({
+      type: 'stream',
+      event_id: row.chunk_event_id,
+      chunk_id: row.chunk_id,
+      occurred_at: toDateString(row.chunk_occurred_at),
+      excerpt: row.chunk_content.slice(0, 500),
+    }));
+  }
+
+  private async composeAnswer(
+    question: string,
+    citations: CanonCitation[],
+    streamCitations: StreamCitation[],
+  ): Promise<string> {
+    if (citations.length === 0 && streamCitations.length === 0) {
+      return NO_COVERAGE_ANSWER;
+    }
+    const fallback =
+      citations.length > 0
+        ? citations[0].statement
+        : `Unverified stream signal: ${streamCitations[0].excerpt}`;
+    if (!this.llm.enabled) {
+      return fallback;
+    }
+    try {
+      const synthesized = await this.llm.completeJson(
+        {
+          model: this.config.driftTier2Model,
+          system: SYNTHESIS_SYSTEM,
+          user: synthesisUserPrompt({
+            question,
+            canonStatements: citations.map((c) => c.statement),
+            streamExcerpts: streamCitations.map((c) => c.excerpt),
+          }),
+          maxTokens: 512,
+          promptVersion: SYNTHESIS_PROMPT_VERSION,
+        },
+        SynthesisResult,
+      );
+      return synthesized.answer;
+    } catch (error) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'synthesis_degraded',
+          error: String(error),
+        }),
+      );
+      return fallback;
+    }
   }
 
   async getEntry(

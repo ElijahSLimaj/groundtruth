@@ -60,6 +60,16 @@ export interface CanonCitation {
   statement: string;
 }
 
+export interface StreamCitation {
+  type: 'stream';
+  event_id: string;
+  chunk_id: string;
+  occurred_at: string | null;
+  excerpt: string;
+}
+
+export type Citation = CanonCitation | StreamCitation;
+
 export interface ConflictSummary {
   entry_id: string | null;
   description: string;
@@ -69,10 +79,11 @@ export interface ConflictSummary {
 export interface QueryResponse {
   answer: string;
   trust: string;
-  citations: CanonCitation[];
+  citations: Citation[];
   conflicts: ConflictSummary[];
   freshness: {
     oldest_citation: string | null;
     decayed_entries_used: number;
   };
+  retrieval_degraded?: boolean;
 }
