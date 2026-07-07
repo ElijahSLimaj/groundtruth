@@ -14,6 +14,7 @@ export interface Principal {
 export interface AuthenticatedRequest {
   principal?: Principal;
   headers: Record<string, string | string[] | undefined>;
+  url?: string;
 }
 
 export const CurrentPrincipal = createParamDecorator(

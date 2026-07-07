@@ -72,6 +72,15 @@ export class ApiKeyGuard implements CanActivate {
       rateTier: row.rate_tier,
       principals: [`person:${row.person_id}`],
     };
+
+    const tool = (request.url ?? 'unknown').split('?')[0];
+    await this.db.withTenant(row.tenant_id, (client) =>
+      client.query(
+        `insert into metering_events (tenant_id, api_key_id, person_id, tool)
+         values ($1, $2, $3, $4)`,
+        [row.tenant_id, row.key_id, row.person_id, tool],
+      ),
+    );
     return true;
   }
 }

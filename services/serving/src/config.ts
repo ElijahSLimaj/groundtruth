@@ -11,6 +11,9 @@ export interface ServingConfig {
   slackSigningSecret: string | null;
   slackApprovalChannel: string | null;
   slackTenantId: string | null;
+  schedulerEnabled: boolean;
+  driftIntervalMs: number;
+  decayIntervalMs: number;
 }
 
 export function loadConfig(
@@ -35,5 +38,8 @@ export function loadConfig(
     slackSigningSecret: env.SLACK_SIGNING_SECRET ?? null,
     slackApprovalChannel: env.SLACK_APPROVAL_CHANNEL ?? null,
     slackTenantId: env.SLACK_TENANT_ID ?? null,
+    schedulerEnabled: env.SCHEDULER_ENABLED === '1',
+    driftIntervalMs: Number(env.DRIFT_INTERVAL_MS ?? 300_000),
+    decayIntervalMs: Number(env.DECAY_INTERVAL_MS ?? 86_400_000),
   };
 }

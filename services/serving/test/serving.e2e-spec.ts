@@ -138,6 +138,7 @@ suite('serving api (e2e)', () => {
       [tenantId],
     );
     for (const stmt of [
+      `delete from metering_events where tenant_id = $1`,
       `delete from audit_log where tenant_id = $1`,
       `delete from api_keys where tenant_id = $1`,
       `delete from drift_proposals where tenant_id = $1`,

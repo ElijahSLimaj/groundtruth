@@ -152,6 +152,7 @@ suite('query stream fallback and synthesis (e2e)', () => {
     }
     for (const stmt of [
       `delete from audit_log where tenant_id = $1`,
+      `delete from metering_events where tenant_id = $1`,
       `delete from api_keys where tenant_id = $1`,
       `update canon_entries set current_version_id = null where tenant_id = $1`,
       `delete from canon_versions where tenant_id = $1`,
