@@ -5,9 +5,16 @@ import { CanonModule } from './canon/canon.module';
 import { ColdStartModule } from './coldstart/coldstart.module';
 import { DatabaseModule } from './database/database.module';
 import { DriftModule } from './drift/drift.module';
+import { SlackAppModule } from './slackapp/slackapp.module';
 
 @Module({
-  imports: [DatabaseModule, CanonModule, DriftModule, ColdStartModule],
+  imports: [
+    DatabaseModule,
+    CanonModule,
+    DriftModule,
+    ColdStartModule,
+    SlackAppModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })

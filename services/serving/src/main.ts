@@ -5,7 +5,9 @@ import { configureApp } from './configure-app';
 
 async function bootstrap(): Promise<void> {
   const config = loadConfig();
-  const app = configureApp(await NestFactory.create(AppModule));
+  const app = configureApp(
+    await NestFactory.create(AppModule, { rawBody: true }),
+  );
   await app.listen(config.port);
 }
 

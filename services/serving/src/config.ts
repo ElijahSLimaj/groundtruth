@@ -7,6 +7,10 @@ export interface ServingConfig {
   driftTier2Model: string;
   driftTier3Model: string;
   embeddingModel: string;
+  slackBotToken: string | null;
+  slackSigningSecret: string | null;
+  slackApprovalChannel: string | null;
+  slackTenantId: string | null;
 }
 
 export function loadConfig(
@@ -27,5 +31,9 @@ export function loadConfig(
     driftTier2Model: env.DRIFT_TIER2_MODEL ?? 'claude-haiku-4-5',
     driftTier3Model: env.DRIFT_TIER3_MODEL ?? 'claude-opus-4-8',
     embeddingModel: env.EMBEDDING_MODEL ?? 'fake-embedder-v1',
+    slackBotToken: env.SLACK_BOT_TOKEN ?? null,
+    slackSigningSecret: env.SLACK_SIGNING_SECRET ?? null,
+    slackApprovalChannel: env.SLACK_APPROVAL_CHANNEL ?? null,
+    slackTenantId: env.SLACK_TENANT_ID ?? null,
   };
 }
