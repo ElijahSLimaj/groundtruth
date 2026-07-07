@@ -27,14 +27,14 @@ insert into canon_entries (id, tenant_id, domain, tier, owner_id, status, visibi
   ('55555555-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111', 'product', 'operational', '22222222-0000-0000-0000-000000000003', 'active', '{"scope": "tenant"}', interval '30 days')
 on conflict (id) do nothing;
 
-insert into canon_versions (id, tenant_id, entry_id, version_number, statement, created_by) values
-  ('66666666-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', '55555555-0000-0000-0000-000000000001', 1, 'Starter plan is 499 per month, Growth is 1499 per month, annual billing gets two months free. Discounts above 15 percent require founder approval.', '22222222-0000-0000-0000-000000000002'),
-  ('66666666-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111', '55555555-0000-0000-0000-000000000002', 1, 'The RX-2 arm ships with the vision module included as of the June release. The standalone vision SKU is discontinued.', '22222222-0000-0000-0000-000000000003')
+insert into canon_versions (id, tenant_id, entry_id, version_number, statement, created_by, status, attributes) values
+  ('66666666-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', '55555555-0000-0000-0000-000000000001', 1, 'Starter plan is 499 per month, Growth is 1499 per month, annual billing gets two months free. Discounts above 15 percent require founder approval.', '22222222-0000-0000-0000-000000000002', 'approved', '{"plan": "growth", "amount": 1499, "currency": "USD", "billing_period": "monthly", "discount_ceiling_percent": 15}'),
+  ('66666666-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111', '55555555-0000-0000-0000-000000000002', 1, 'The RX-2 arm ships with the vision module included as of the June release. The standalone vision SKU is discontinued.', '22222222-0000-0000-0000-000000000003', 'approved', '{}')
 on conflict (id) do nothing;
 
-update canon_entries set current_version_id = '66666666-0000-0000-0000-000000000001'
+update canon_entries set current_version_id = '66666666-0000-0000-0000-000000000001', verified_at = now()
   where id = '55555555-0000-0000-0000-000000000001' and current_version_id is null;
-update canon_entries set current_version_id = '66666666-0000-0000-0000-000000000002'
+update canon_entries set current_version_id = '66666666-0000-0000-0000-000000000002', verified_at = now()
   where id = '55555555-0000-0000-0000-000000000002' and current_version_id is null;
 
 insert into canon_provenance (tenant_id, version_id, event_id, event_occurred_at)
