@@ -22,7 +22,7 @@ insert into events (id, tenant_id, connector_id, source_type, external_id, occur
   ('00000000-0000-0002-0002-00000000000a', '00000000-0000-0000-0000-00000000000a', '00000000-0000-0001-0000-00000000000a', 'slack', 'msg-a-2', now(), '{"scope": "tenant"}', 'payloads/a/2'),
   ('00000000-0000-0002-0001-00000000000b', '00000000-0000-0000-0000-00000000000b', '00000000-0000-0001-0000-00000000000b', 'slack', 'msg-b-1', now(), '{"scope": "tenant"}', 'payloads/b/1');
 
-insert into event_chunks (tenant_id, event_id, event_occurred_at, chunk_index, content, embedding, embedding_model, acl, token_count, window_key, member_event_ids)
+insert into event_chunks (tenant_id, event_id, event_occurred_at, chunk_index, content, embedding, embedding_model, acl, token_count, window_key, member_event_ids, source_type)
 select
   '00000000-0000-0000-0000-00000000000a',
   '00000000-0000-0002-0001-00000000000a',
@@ -34,7 +34,8 @@ select
   '{"scope": "tenant"}',
   4,
   'thread-a',
-  array['00000000-0000-0002-0001-00000000000a']::uuid[]
+  array['00000000-0000-0002-0001-00000000000a']::uuid[],
+  'slack'
 from events where id = '00000000-0000-0002-0001-00000000000a';
 
 insert into canon_entries (id, tenant_id, domain, tier, owner_id, status, visibility, verify_interval) values

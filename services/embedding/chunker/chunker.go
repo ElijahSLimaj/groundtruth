@@ -14,6 +14,7 @@ const chatTokenBudget = 800
 type Message struct {
 	EventID    uuid.UUID
 	OccurredAt time.Time
+	SourceType string
 	ThreadKey  string
 	Author     string
 	Text       string
@@ -23,6 +24,7 @@ type Message struct {
 type Chunk struct {
 	AnchorEventID    uuid.UUID
 	AnchorOccurredAt time.Time
+	SourceType       string
 	WindowKey        string
 	ChunkIndex       int
 	Content          string
@@ -146,6 +148,7 @@ func buildChunk(windowKey string, members []Message, index int) Chunk {
 	return Chunk{
 		AnchorEventID:    anchor.EventID,
 		AnchorOccurredAt: anchor.OccurredAt,
+		SourceType:       members[0].SourceType,
 		WindowKey:        windowKey,
 		ChunkIndex:       index,
 		Content:          content,

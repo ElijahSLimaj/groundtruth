@@ -25,8 +25,8 @@ select is(
 );
 
 select lives_ok(
-  $$insert into event_chunks (tenant_id, event_id, event_occurred_at, chunk_index, content, embedding, embedding_model, acl, token_count, window_key, member_event_ids)
-    select '00000000-0000-0000-0000-00000000000a', id, occurred_at, 0, 'chunk', array_fill(0.5, array[1536])::vector, 'test-model', acl, 2, 'w-1', array[id]
+  $$insert into event_chunks (tenant_id, event_id, event_occurred_at, chunk_index, content, embedding, embedding_model, acl, token_count, window_key, member_event_ids, source_type)
+    select '00000000-0000-0000-0000-00000000000a', id, occurred_at, 0, 'chunk', array_fill(0.5, array[1536])::vector, 'test-model', acl, 2, 'w-1', array[id], 'slack'
     from events where id = '00000000-0000-0002-0001-00000000000a'$$,
   'embedder writes chunks'
 );

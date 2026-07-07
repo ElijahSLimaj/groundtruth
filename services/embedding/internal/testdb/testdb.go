@@ -86,6 +86,28 @@ func CreateFixture(t *testing.T, admin *pgxpool.Pool, payloadRoot string) Fixtur
 	return f
 }
 
+func AppPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	url := os.Getenv("TEST_DATABASE_URL")
+	if url == "" {
+		t.Skip("TEST_DATABASE_URL not set, skipping database integration tests")
+	}
+	cfg, err := pgxpool.ParseConfig(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, "set role brain_app")
+		return err
+	}
+	pool, err := pgxpool.NewWithConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	return pool
+}
+
 func CleanupWatermark(t *testing.T, admin *pgxpool.Pool, model string) {
 	t.Helper()
 	t.Cleanup(func() {

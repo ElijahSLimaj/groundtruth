@@ -35,6 +35,7 @@ type Result struct {
 type scannedEvent struct {
 	ID              uuid.UUID
 	TenantID        uuid.UUID
+	SourceType      string
 	ThreadKey       string
 	OccurredAt      time.Time
 	IngestedAt      time.Time
@@ -131,7 +132,7 @@ func (p *Pipeline) saveWatermark(ctx context.Context, model string, t time.Time,
 	return nil
 }
 
-const eventColumns = `id, tenant_id, thread_key, occurred_at, ingested_at, acl::text, payload_ref, coalesce(author_source_ref, '')`
+const eventColumns = `id, tenant_id, source_type, thread_key, occurred_at, ingested_at, acl::text, payload_ref, coalesce(author_source_ref, '')`
 
 func (p *Pipeline) scanEvents(ctx context.Context, wmTime time.Time, wmID uuid.UUID) ([]scannedEvent, error) {
 	rows, err := p.Pool.Query(ctx, `
@@ -153,7 +154,7 @@ func collectEvents(rows pgx.Rows) ([]scannedEvent, error) {
 	for rows.Next() {
 		var ev scannedEvent
 		var acl string
-		if err := rows.Scan(&ev.ID, &ev.TenantID, &ev.ThreadKey, &ev.OccurredAt, &ev.IngestedAt, &acl, &ev.PayloadRef, &ev.AuthorSourceRef); err != nil {
+		if err := rows.Scan(&ev.ID, &ev.TenantID, &ev.SourceType, &ev.ThreadKey, &ev.OccurredAt, &ev.IngestedAt, &acl, &ev.PayloadRef, &ev.AuthorSourceRef); err != nil {
 			return nil, fmt.Errorf("scan event row: %w", err)
 		}
 		ev.ACL = []byte(acl)
@@ -409,6 +410,7 @@ func (p *Pipeline) toMessages(ctx context.Context, tenantID uuid.UUID, events []
 		messages = append(messages, chunker.Message{
 			EventID:    ev.ID,
 			OccurredAt: ev.OccurredAt,
+			SourceType: ev.SourceType,
 			ThreadKey:  ev.ThreadKey,
 			Author:     strings.TrimPrefix(ev.AuthorSourceRef, "slack:"),
 			Text:       body.Body,
@@ -509,11 +511,11 @@ func (p *Pipeline) replaceWindows(ctx context.Context, model string, tenantID uu
 		if _, err := tx.Exec(ctx, `
 			insert into event_chunks (
 				tenant_id, event_id, event_occurred_at, chunk_index, content,
-				embedding, embedding_model, acl, token_count, window_key, member_event_ids
+				embedding, embedding_model, acl, token_count, window_key, member_event_ids, source_type
 			)
-			values ($1, $2, $3, $4, $5, $6::extensions.vector, $7, $8::jsonb, $9, $10, $11)
+			values ($1, $2, $3, $4, $5, $6::extensions.vector, $7, $8::jsonb, $9, $10, $11, $12)
 		`, tenantID, c.AnchorEventID, c.AnchorOccurredAt, c.ChunkIndex, c.Content,
-			vectorLiteral(c.vector), model, string(c.ACL), c.TokenEstimate, c.WindowKey, memberIDs,
+			vectorLiteral(c.vector), model, string(c.ACL), c.TokenEstimate, c.WindowKey, memberIDs, c.SourceType,
 		); err != nil {
 			return fmt.Errorf("insert chunk %s/%d: %w", c.WindowKey, c.ChunkIndex, err)
 		}
