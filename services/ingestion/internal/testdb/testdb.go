@@ -66,6 +66,7 @@ func CreateFixture(t *testing.T, admin *pgxpool.Pool) Fixture {
 	t.Cleanup(func() {
 		ctx := context.Background()
 		for _, stmt := range []string{
+			`delete from tenant_keys where tenant_id = $1`,
 			`delete from ingestion_dlq where tenant_id = $1`,
 			`delete from ingestion_queue where tenant_id = $1`,
 			`delete from connector_state where tenant_id = $1`,

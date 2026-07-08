@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -10,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -17,6 +20,7 @@ import (
 	"github.com/attempttechnologies/company-brain/services/ingestion/connector"
 	"github.com/attempttechnologies/company-brain/services/ingestion/gmail"
 	"github.com/attempttechnologies/company-brain/services/ingestion/internal/config"
+	"github.com/attempttechnologies/company-brain/services/ingestion/keys"
 	"github.com/attempttechnologies/company-brain/services/ingestion/runtime"
 	"github.com/attempttechnologies/company-brain/services/ingestion/slack"
 	"github.com/attempttechnologies/company-brain/services/ingestion/store"
@@ -58,9 +62,13 @@ func run(logger *slog.Logger) error {
 			gmail.SourceType: gmail.Normalizer{},
 		},
 	}
+	payloads, err := buildPayloadStore(ctx, cfg, pool, logger)
+	if err != nil {
+		return err
+	}
 	processor := &store.Processor{
 		Pool:     pool,
-		Payloads: &store.FSPayloadStore{Root: cfg.PayloadRoot},
+		Payloads: payloads,
 	}
 
 	logger.Info("ingestion started",
@@ -85,6 +93,38 @@ func run(logger *slog.Logger) error {
 	wg.Wait()
 	logger.Info("ingestion stopped")
 	return ctx.Err()
+}
+
+func buildPayloadStore(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger) (store.PayloadStore, error) {
+	if cfg.MasterKeyHex == "" {
+		logger.Warn("payload encryption disabled, set MASTER_KEY to encrypt at rest")
+		return &store.FSPayloadStore{Root: cfg.PayloadRoot}, nil
+	}
+	wrapper, err := keys.NewAESWrapper(cfg.MasterKeyHex)
+	if err != nil {
+		return nil, err
+	}
+	keyService := &keys.Service{Pool: pool, Wrapper: wrapper}
+
+	var blobs store.BlobStore
+	if cfg.S3Bucket != "" {
+		awsCfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(cfg.S3Region))
+		if err != nil {
+			return nil, fmt.Errorf("aws config: %w", err)
+		}
+		client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+			if cfg.S3Endpoint != "" {
+				o.BaseEndpoint = &cfg.S3Endpoint
+				o.UsePathStyle = true
+			}
+		})
+		blobs = &store.S3BlobStore{Client: client, Bucket: cfg.S3Bucket}
+		logger.Info("payloads encrypted to object storage", "bucket", cfg.S3Bucket)
+	} else {
+		blobs = &store.FSBlobStore{Root: cfg.PayloadRoot}
+		logger.Info("payloads encrypted to local storage", "root", cfg.PayloadRoot)
+	}
+	return &store.EncryptedPayloadStore{Blobs: blobs, Keys: keyService}, nil
 }
 
 func newPool(ctx context.Context, cfg config.Config) (*pgxpool.Pool, error) {

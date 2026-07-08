@@ -10,6 +10,10 @@ type Config struct {
 	DatabaseURL     string
 	DatabaseSetRole string
 	PayloadRoot     string
+	MasterKeyHex    string
+	S3Bucket        string
+	S3Endpoint      string
+	S3Region        string
 	PollInterval    time.Duration
 	HealthInterval  time.Duration
 	ProcessBatch    int
@@ -20,6 +24,10 @@ func Load(getenv func(string) string) (Config, error) {
 		DatabaseURL:     getenv("DATABASE_URL"),
 		DatabaseSetRole: valueOr(getenv, "DATABASE_SET_ROLE", "brain_worker"),
 		PayloadRoot:     getenv("PAYLOAD_ROOT"),
+		MasterKeyHex:    getenv("MASTER_KEY"),
+		S3Bucket:        getenv("S3_BUCKET"),
+		S3Endpoint:      getenv("S3_ENDPOINT"),
+		S3Region:        getenv("S3_REGION"),
 		PollInterval:    30 * time.Second,
 		HealthInterval:  5 * time.Minute,
 		ProcessBatch:    100,
@@ -27,8 +35,11 @@ func Load(getenv func(string) string) (Config, error) {
 	if cfg.DatabaseURL == "" {
 		return cfg, fmt.Errorf("DATABASE_URL is required")
 	}
-	if cfg.PayloadRoot == "" {
-		return cfg, fmt.Errorf("PAYLOAD_ROOT is required")
+	if cfg.PayloadRoot == "" && cfg.S3Bucket == "" {
+		return cfg, fmt.Errorf("PAYLOAD_ROOT or S3_BUCKET is required")
+	}
+	if cfg.S3Bucket != "" && cfg.MasterKeyHex == "" {
+		return cfg, fmt.Errorf("MASTER_KEY is required when payloads go to object storage")
 	}
 
 	var err error

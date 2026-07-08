@@ -1,6 +1,7 @@
 import { unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import {
   BadRequestException,
   Inject,
@@ -27,6 +28,7 @@ export interface ErasureRequestRow {
 @Injectable()
 export class ErasureService {
   private readonly logger = new Logger(ErasureService.name);
+  private s3: S3Client | null = null;
 
   constructor(
     private readonly db: DatabaseService,
@@ -127,13 +129,13 @@ export class ErasureService {
     if (refs.length === 0) {
       return 0;
     }
-    if (!this.config.payloadRoot) {
+    if (!this.config.payloadRoot && !this.config.s3Bucket) {
       this.logger.warn(
         JSON.stringify({
           event: 'erasure_payloads_retained',
           tenant: tenantId,
           refs: refs.length,
-          reason: 'PAYLOAD_ROOT not configured',
+          reason: 'neither PAYLOAD_ROOT nor S3_BUCKET is configured',
         }),
       );
       return 0;
@@ -149,8 +151,20 @@ export class ErasureService {
           `payload ref ${ref} does not belong to tenant ${tenantId}`,
         );
       }
+      if (this.config.s3Bucket) {
+        await this.s3Client().send(
+          new DeleteObjectCommand({
+            Bucket: this.config.s3Bucket,
+            Key: `${match[1]}/${match[2]}`,
+          }),
+        );
+        deleted += 1;
+        continue;
+      }
       try {
-        await unlink(join(this.config.payloadRoot, match[1], match[2]));
+        await unlink(
+          join(this.config.payloadRoot as string, match[1], match[2]),
+        );
         deleted += 1;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -159,5 +173,16 @@ export class ErasureService {
       }
     }
     return deleted;
+  }
+
+  private s3Client(): S3Client {
+    if (!this.s3) {
+      this.s3 = new S3Client({
+        region: this.config.s3Region ?? undefined,
+        endpoint: this.config.s3Endpoint ?? undefined,
+        forcePathStyle: this.config.s3Endpoint !== null,
+      });
+    }
+    return this.s3;
   }
 }

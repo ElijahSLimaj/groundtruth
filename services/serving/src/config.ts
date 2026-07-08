@@ -17,6 +17,9 @@ export interface ServingConfig {
   mergeIntervalMs: number;
   mergeSimilarityThreshold: number;
   payloadRoot: string | null;
+  s3Bucket: string | null;
+  s3Endpoint: string | null;
+  s3Region: string | null;
 }
 
 export function loadConfig(
@@ -47,5 +50,8 @@ export function loadConfig(
     mergeIntervalMs: Number(env.MERGE_INTERVAL_MS ?? 604_800_000),
     mergeSimilarityThreshold: Number(env.MERGE_SIMILARITY_THRESHOLD ?? 0.9),
     payloadRoot: env.PAYLOAD_ROOT ?? null,
+    s3Bucket: env.S3_BUCKET ?? null,
+    s3Endpoint: env.S3_ENDPOINT ?? null,
+    s3Region: env.S3_REGION ?? null,
   };
 }
