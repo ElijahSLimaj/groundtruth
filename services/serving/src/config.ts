@@ -14,6 +14,8 @@ export interface ServingConfig {
   schedulerEnabled: boolean;
   driftIntervalMs: number;
   decayIntervalMs: number;
+  mergeIntervalMs: number;
+  mergeSimilarityThreshold: number;
 }
 
 export function loadConfig(
@@ -41,5 +43,7 @@ export function loadConfig(
     schedulerEnabled: env.SCHEDULER_ENABLED === '1',
     driftIntervalMs: Number(env.DRIFT_INTERVAL_MS ?? 300_000),
     decayIntervalMs: Number(env.DECAY_INTERVAL_MS ?? 86_400_000),
+    mergeIntervalMs: Number(env.MERGE_INTERVAL_MS ?? 604_800_000),
+    mergeSimilarityThreshold: Number(env.MERGE_SIMILARITY_THRESHOLD ?? 0.9),
   };
 }

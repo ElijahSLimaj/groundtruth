@@ -9,6 +9,7 @@ import {
 import { ColdStartService } from '../coldstart/coldstart.service';
 import { DatabaseService } from '../database/database.service';
 import { DriftService } from '../drift/drift.service';
+import { MergeService } from '../drift/merge.service';
 import { SERVING_CONFIG } from '../config';
 import type { ServingConfig } from '../config';
 import { SlackAppService } from '../slackapp/slackapp.service';
@@ -22,6 +23,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly db: DatabaseService,
     private readonly drift: DriftService,
+    private readonly merge: MergeService,
     private readonly coldStart: ColdStartService,
     private readonly slackApp: SlackAppService,
     @Inject(SERVING_CONFIG) private readonly config: ServingConfig,
@@ -42,11 +44,17 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
         void this.decaySweep();
       }, this.config.decayIntervalMs),
     );
+    this.timers.push(
+      setInterval(() => {
+        void this.mergeSweep();
+      }, this.config.mergeIntervalMs),
+    );
     this.logger.log(
       JSON.stringify({
         event: 'scheduler_started',
         drift_interval_ms: this.config.driftIntervalMs,
         decay_interval_ms: this.config.decayIntervalMs,
+        merge_interval_ms: this.config.mergeIntervalMs,
       }),
     );
   }
@@ -98,6 +106,31 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
       }
     } finally {
       this.running = false;
+    }
+  }
+
+  async mergeSweep(): Promise<void> {
+    for (const tenantId of await this.tenants()) {
+      try {
+        const proposed = await this.merge.runOnce(tenantId);
+        if (proposed > 0) {
+          this.logger.log(
+            JSON.stringify({
+              event: 'merge_sweep',
+              tenant: tenantId,
+              proposed,
+            }),
+          );
+        }
+      } catch (error) {
+        this.logger.error(
+          JSON.stringify({
+            event: 'merge_sweep_failed',
+            tenant: tenantId,
+            error: String(error),
+          }),
+        );
+      }
     }
   }
 

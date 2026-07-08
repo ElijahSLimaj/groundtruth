@@ -4,6 +4,7 @@ import { SERVING_CONFIG } from '../config';
 import type { ServingConfig } from '../config';
 import { DriftService } from './drift.service';
 import { AnthropicLlmClient, DisabledLlmClient, LLM_CLIENT } from './llm';
+import { MergeService } from './merge.service';
 
 @Module({
   providers: [
@@ -16,7 +17,8 @@ import { AnthropicLlmClient, DisabledLlmClient, LLM_CLIENT } from './llm';
           : new DisabledLlmClient(),
     },
     DriftService,
+    MergeService,
   ],
-  exports: [DriftService, LLM_CLIENT],
+  exports: [DriftService, MergeService, LLM_CLIENT],
 })
 export class DriftModule {}

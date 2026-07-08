@@ -38,6 +38,16 @@ export class ReviewService {
   ): Promise<void> {
     await this.db.withTenant(tenantId, async (client) => {
       const proposal = await this.loadPending(client, proposalId);
+
+      if (proposal.kind === 'merge') {
+        await client.query(`select public.canon_merge_apply($1, $2, $3)`, [
+          proposalId,
+          reviewerId,
+          note,
+        ]);
+        return;
+      }
+
       let versionId = proposal.pendingVersionId;
 
       if (!versionId && proposal.entryId) {
