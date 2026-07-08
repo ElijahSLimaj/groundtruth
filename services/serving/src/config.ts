@@ -16,6 +16,7 @@ export interface ServingConfig {
   decayIntervalMs: number;
   mergeIntervalMs: number;
   mergeSimilarityThreshold: number;
+  payloadRoot: string | null;
 }
 
 export function loadConfig(
@@ -45,5 +46,6 @@ export function loadConfig(
     decayIntervalMs: Number(env.DECAY_INTERVAL_MS ?? 86_400_000),
     mergeIntervalMs: Number(env.MERGE_INTERVAL_MS ?? 604_800_000),
     mergeSimilarityThreshold: Number(env.MERGE_SIMILARITY_THRESHOLD ?? 0.9),
+    payloadRoot: env.PAYLOAD_ROOT ?? null,
   };
 }
