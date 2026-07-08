@@ -203,7 +203,7 @@ func (p *Pipeline) scanEvents(ctx context.Context, wmTime time.Time, wmID uuid.U
 	rows, err := p.Pool.Query(ctx, `
 		select `+eventColumns+`
 		from events
-		where source_type in ('slack', 'gmail') and not tombstoned and (ingested_at, id) > ($1, $2)
+		where source_type in ('slack', 'gmail', 'gdrive', 'notion') and not tombstoned and (ingested_at, id) > ($1, $2)
 		order by ingested_at, id
 		limit $3
 	`, wmTime, wmID, p.scanLimit())
@@ -330,15 +330,20 @@ func (p *Pipeline) processTenant(ctx context.Context, model string, tenantID uui
 func chunkBySource(messages []chunker.Message) []chunker.Chunk {
 	var chat []chunker.Message
 	var email []chunker.Message
+	var documents []chunker.Message
 	for _, message := range messages {
-		if message.SourceType == "gmail" {
+		switch message.SourceType {
+		case "gmail":
 			email = append(email, message)
-			continue
+		case "gdrive", "notion":
+			documents = append(documents, message)
+		default:
+			chat = append(chat, message)
 		}
-		chat = append(chat, message)
 	}
 	chunks := chunker.ChunkChat(chat)
 	chunks = append(chunks, chunker.ChunkEmail(email)...)
+	chunks = append(chunks, chunker.ChunkDocument(documents)...)
 	return chunks
 }
 
@@ -353,7 +358,11 @@ func keys(set map[uuid.UUID]bool) []uuid.UUID {
 func (p *Pipeline) fetchWindows(ctx context.Context, tenantID uuid.UUID, windowKeys []string) ([]scannedEvent, error) {
 	var all []scannedEvent
 	for _, key := range windowKeys {
-		if eventID, isEmail := strings.CutPrefix(key, "email:"); isEmail {
+		eventID, isSingleEvent := strings.CutPrefix(key, "email:")
+		if !isSingleEvent {
+			eventID, isSingleEvent = strings.CutPrefix(key, "doc:")
+		}
+		if isSingleEvent {
 			rows, err := p.Pool.Query(ctx, `
 				select `+eventColumns+`
 				from events
@@ -380,7 +389,7 @@ func (p *Pipeline) fetchWindows(ctx context.Context, tenantID uuid.UUID, windowK
 			rows, err = p.Pool.Query(ctx, `
 				select `+eventColumns+`
 				from events
-				where source_type in ('slack', 'gmail') and not tombstoned and tenant_id = $1
+				where source_type in ('slack', 'gmail', 'gdrive', 'notion') and not tombstoned and tenant_id = $1
 				  and thread_key like $2
 				  and occurred_at >= $3 and occurred_at < $4
 			`, tenantID, channel+":%", hour, hour.Add(time.Hour))
@@ -388,7 +397,7 @@ func (p *Pipeline) fetchWindows(ctx context.Context, tenantID uuid.UUID, windowK
 			rows, err = p.Pool.Query(ctx, `
 				select `+eventColumns+`
 				from events
-				where source_type in ('slack', 'gmail') and not tombstoned and tenant_id = $1 and thread_key = $2
+				where source_type in ('slack', 'gmail', 'gdrive', 'notion') and not tombstoned and tenant_id = $1 and thread_key = $2
 			`, tenantID, key)
 		}
 		if err != nil {
@@ -416,7 +425,7 @@ func (p *Pipeline) fetchContext(ctx context.Context, tenantID uuid.UUID, scanned
 	rows, err := p.Pool.Query(ctx, `
 		select `+eventColumns+`
 		from events
-		where source_type in ('slack', 'gmail') and not tombstoned and tenant_id = $1 and thread_key = any($2)
+		where source_type in ('slack', 'gmail', 'gdrive', 'notion') and not tombstoned and tenant_id = $1 and thread_key = any($2)
 	`, tenantID, keys)
 	if err != nil {
 		return nil, fmt.Errorf("fetch threads: %w", err)
@@ -452,7 +461,7 @@ func (p *Pipeline) fetchContext(ctx context.Context, tenantID uuid.UUID, scanned
 		peerRows, err := p.Pool.Query(ctx, `
 			select `+eventColumns+`
 			from events
-			where source_type in ('slack', 'gmail') and not tombstoned and tenant_id = $1
+			where source_type in ('slack', 'gmail', 'gdrive', 'notion') and not tombstoned and tenant_id = $1
 			  and thread_key like $2
 			  and occurred_at >= $3 and occurred_at < $4
 		`, tenantID, w.channel+":%", w.hour, w.hour.Add(time.Hour))

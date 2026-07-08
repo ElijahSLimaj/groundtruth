@@ -19,9 +19,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/attempttechnologies/company-brain/services/ingestion/connector"
+	"github.com/attempttechnologies/company-brain/services/ingestion/gdrive"
 	"github.com/attempttechnologies/company-brain/services/ingestion/gmail"
 	"github.com/attempttechnologies/company-brain/services/ingestion/internal/config"
 	"github.com/attempttechnologies/company-brain/services/ingestion/keys"
+	"github.com/attempttechnologies/company-brain/services/ingestion/notion"
 	"github.com/attempttechnologies/company-brain/services/ingestion/runtime"
 	"github.com/attempttechnologies/company-brain/services/ingestion/slack"
 	"github.com/attempttechnologies/company-brain/services/ingestion/store"
@@ -53,15 +55,21 @@ func run(logger *slog.Logger) error {
 
 	slackConnector := slack.New(func(token string) slack.API { return slack.NewClient(token) })
 	gmailConnector := gmail.New(func(token string) gmail.API { return gmail.NewClient(token) })
+	driveConnector := gdrive.New(func(token string) gdrive.API { return gdrive.NewClient(token) })
+	notionConnector := notion.New(func(token string) notion.API { return notion.NewClient(token) })
 	runner := &runtime.Runner{
 		Pool: pool,
 		Connectors: map[string]connector.Connector{
-			slack.SourceType: slackConnector,
-			gmail.SourceType: gmailConnector,
+			slack.SourceType:  slackConnector,
+			gmail.SourceType:  gmailConnector,
+			gdrive.SourceType: driveConnector,
+			notion.SourceType: notionConnector,
 		},
 		Normalizers: map[string]runtime.Normalizer{
-			slack.SourceType: slack.Normalizer{},
-			gmail.SourceType: gmail.Normalizer{},
+			slack.SourceType:  slack.Normalizer{},
+			gmail.SourceType:  gmail.Normalizer{},
+			gdrive.SourceType: gdrive.Normalizer{},
+			notion.SourceType: notion.Normalizer{},
 		},
 	}
 	payloads, err := buildPayloadStore(ctx, cfg, pool, logger)
