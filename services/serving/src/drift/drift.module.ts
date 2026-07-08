@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { SERVING_CONFIG } from '../config';
 import type { ServingConfig } from '../config';
 import { DriftService } from './drift.service';
+import { GapService } from './gap.service';
 import { AnthropicLlmClient, DisabledLlmClient, LLM_CLIENT } from './llm';
 import { MergeService } from './merge.service';
 
@@ -17,8 +18,9 @@ import { MergeService } from './merge.service';
           : new DisabledLlmClient(),
     },
     DriftService,
+    GapService,
     MergeService,
   ],
-  exports: [DriftService, MergeService, LLM_CLIENT],
+  exports: [DriftService, GapService, MergeService, LLM_CLIENT],
 })
 export class DriftModule {}

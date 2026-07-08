@@ -9,6 +9,7 @@ import {
 import { ColdStartService } from '../coldstart/coldstart.service';
 import { DatabaseService } from '../database/database.service';
 import { DriftService } from '../drift/drift.service';
+import { GapService } from '../drift/gap.service';
 import { MergeService } from '../drift/merge.service';
 import { SERVING_CONFIG } from '../config';
 import type { ServingConfig } from '../config';
@@ -23,6 +24,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly db: DatabaseService,
     private readonly drift: DriftService,
+    private readonly gap: GapService,
     private readonly merge: MergeService,
     private readonly coldStart: ColdStartService,
     private readonly slackApp: SlackAppService,
@@ -83,6 +85,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
       for (const tenantId of await this.tenants()) {
         try {
           const drift = await this.drift.runOnce(tenantId);
+          const gaps = await this.gap.runOnce(tenantId);
           const coldStart = await this.coldStart.runOnce(tenantId);
           const notified = await this.slackApp.notifyPending(tenantId);
           this.logger.log(
@@ -90,6 +93,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
               event: 'sweep',
               tenant: tenantId,
               drift,
+              gaps,
               cold_start: coldStart,
               slack_notified: notified,
             }),

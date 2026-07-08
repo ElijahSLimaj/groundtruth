@@ -162,6 +162,7 @@ suite('drift engine (e2e)', () => {
       await closeApp();
     }
     for (const stmt of [
+      `delete from unmatched_chunks where tenant_id = $1`,
       `delete from drift_evidence where tenant_id = $1`,
       `delete from drift_proposals where tenant_id = $1`,
       `delete from drift_state where tenant_id = $1`,

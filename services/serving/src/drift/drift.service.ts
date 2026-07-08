@@ -45,6 +45,7 @@ interface Tier1Candidate {
   windowKey: string;
   createdAt: Date;
   authorOk: boolean;
+  authorKey: string;
   entryId: string | null;
   entryTier: string | null;
   entryDomain: string | null;
@@ -97,13 +98,18 @@ export class DriftService {
       return result;
     }
 
+    const unmatched: Tier1Candidate[] = [];
     for (const candidate of candidates) {
       if (!this.passesTier1(candidate, tuning)) {
+        if (candidate.authorOk) {
+          unmatched.push(candidate);
+        }
         continue;
       }
       result.tier1Passed++;
       await this.classify(tenantId, candidate, tuning, result);
     }
+    await this.bufferUnmatched(tenantId, unmatched);
 
     const last = candidates[candidates.length - 1];
     await this.db.withTenant(tenantId, (client) =>
@@ -136,6 +142,7 @@ export class DriftService {
       window_key: string;
       created_at: Date;
       author_ok: boolean;
+      author_key: string;
       entry_id: string | null;
       entry_tier: string | null;
       entry_domain: string | null;
@@ -156,14 +163,18 @@ export class DriftService {
                exists (
                  select 1 from events e
                  where e.id = any(c.member_event_ids) and e.author_source_ref is not null
-               ) as author_ok
+               ) as author_ok,
+               coalesce(
+                 (select e.author_source_ref from events e where e.id = c.event_id),
+                 'unknown'
+               ) as author_key
         from event_chunks c, wm
         where not c.tombstoned and (c.created_at, c.id) > (wm.t, wm.i)
         order by c.created_at, c.id
         limit $1
       )
       select nc.id as chunk_id, nc.event_id as anchor_event_id, nc.content,
-             nc.source_type, nc.window_key, nc.created_at, nc.author_ok,
+             nc.source_type, nc.window_key, nc.created_at, nc.author_ok, nc.author_key,
              cand.entry_id, cand.tier as entry_tier, cand.domain as entry_domain,
              cand.owner_id, cand.statement, cand.attributes, cand.similarity
       from new_chunks nc
@@ -191,6 +202,7 @@ export class DriftService {
       windowKey: row.window_key,
       createdAt: row.created_at,
       authorOk: row.author_ok,
+      authorKey: row.author_key,
       entryId: row.entry_id,
       entryTier: row.entry_tier,
       entryDomain: row.entry_domain,
@@ -199,6 +211,30 @@ export class DriftService {
       attributes: row.attributes,
       similarity: row.similarity === null ? null : Number(row.similarity),
     }));
+  }
+
+  private async bufferUnmatched(
+    tenantId: string,
+    unmatched: Tier1Candidate[],
+  ): Promise<void> {
+    if (unmatched.length === 0) {
+      return;
+    }
+    await this.db.withTenant(tenantId, async (client) => {
+      for (const candidate of unmatched) {
+        await client.query(
+          `insert into unmatched_chunks (tenant_id, chunk_id, event_id, author_key)
+           values ($1, $2, $3, $4)
+           on conflict (chunk_id) do nothing`,
+          [
+            tenantId,
+            candidate.chunkId,
+            candidate.anchorEventId,
+            candidate.authorKey,
+          ],
+        );
+      }
+    });
   }
 
   private passesTier1(
