@@ -15,6 +15,7 @@ import {
   tier3UserPrompt,
 } from './prompts';
 import {
+  calibrateConfidence,
   decodeTier3,
   resolveTuning,
   Tier2Result,
@@ -245,7 +246,12 @@ export class DriftService {
       return false;
     }
     const discount = tuning.tier1_source_discounts[candidate.sourceType] ?? 0;
-    return (candidate.similarity ?? 0) >= tuning.tier1_threshold - discount;
+    const penalty = candidate.entryDomain
+      ? (tuning.tier1_domain_penalties[candidate.entryDomain] ?? 0)
+      : 0;
+    return (
+      (candidate.similarity ?? 0) >= tuning.tier1_threshold - discount + penalty
+    );
   }
 
   private async classify(
@@ -455,6 +461,10 @@ export class DriftService {
       { chunkId: candidate.chunkId, eventId: candidate.anchorEventId },
       ...corroborating,
     ];
+    const confidence = calibrateConfidence(
+      draft.confidence,
+      tuning.tier3_calibration,
+    );
 
     await this.db.withTenant(tenantId, async (client) => {
       const budgetUsed = await client.query<{ n: string }>(
@@ -494,7 +504,7 @@ export class DriftService {
           kind,
           draft.draftedStatement,
           JSON.stringify(draft.draftedAttributes),
-          draft.confidence,
+          confidence,
           candidate.ownerId,
           candidate.entryDomain,
           tier2.conflicting_field,
@@ -515,7 +525,8 @@ export class DriftService {
           JSON.stringify({
             kind,
             entry_id: candidate.entryId,
-            confidence: draft.confidence,
+            confidence,
+            raw_confidence: draft.confidence,
             description: draft.contradictionDescription,
             excerpts: draft.supportingExcerpts,
             prompt_versions: [TIER2_PROMPT_VERSION, TIER3_PROMPT_VERSION],

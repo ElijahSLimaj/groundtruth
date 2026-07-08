@@ -11,6 +11,7 @@ import { DatabaseService } from '../database/database.service';
 import { DriftService } from '../drift/drift.service';
 import { GapService } from '../drift/gap.service';
 import { MergeService } from '../drift/merge.service';
+import { TuningService } from '../drift/tuning.service';
 import { SERVING_CONFIG } from '../config';
 import type { ServingConfig } from '../config';
 import { SlackAppService } from '../slackapp/slackapp.service';
@@ -26,6 +27,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     private readonly drift: DriftService,
     private readonly gap: GapService,
     private readonly merge: MergeService,
+    private readonly tuning: TuningService,
     private readonly coldStart: ColdStartService,
     private readonly slackApp: SlackAppService,
     @Inject(SERVING_CONFIG) private readonly config: ServingConfig,
@@ -119,19 +121,19 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     for (const tenantId of await this.tenants()) {
       try {
         const proposed = await this.merge.runOnce(tenantId);
-        if (proposed > 0) {
-          this.logger.log(
-            JSON.stringify({
-              event: 'merge_sweep',
-              tenant: tenantId,
-              proposed,
-            }),
-          );
-        }
+        const tuning = await this.tuning.recalculate(tenantId);
+        this.logger.log(
+          JSON.stringify({
+            event: 'weekly_sweep',
+            tenant: tenantId,
+            merges_proposed: proposed,
+            tuning,
+          }),
+        );
       } catch (error) {
         this.logger.error(
           JSON.stringify({
-            event: 'merge_sweep_failed',
+            event: 'weekly_sweep_failed',
             tenant: tenantId,
             error: String(error),
           }),

@@ -1,4 +1,10 @@
-import { decodeTier3, resolveTuning, Tier2Result, Tier3Wire } from './schemas';
+import {
+  calibrateConfidence,
+  decodeTier3,
+  resolveTuning,
+  Tier2Result,
+  Tier3Wire,
+} from './schemas';
 
 describe('Tier2Result schema', () => {
   it('accepts a valid classification', () => {
@@ -67,5 +73,28 @@ describe('resolveTuning', () => {
     const tuning = resolveTuning({ tier2_gate: 0.85 });
     expect(tuning.tier2_gate).toBe(0.85);
     expect(tuning.cooldown_days).toBe(14);
+  });
+});
+
+describe('calibrateConfidence', () => {
+  it('returns raw confidence on the global identity curve', () => {
+    expect(calibrateConfidence(0.83, null)).toBe(0.83);
+  });
+
+  it('maps raw confidence through its bin rate', () => {
+    const curve = [0.1, 0.2, 0.4, 0.6, 0.9];
+    expect(calibrateConfidence(0.05, curve)).toBe(0.1);
+    expect(calibrateConfidence(0.55, curve)).toBe(0.4);
+    expect(calibrateConfidence(1, curve)).toBe(0.9);
+  });
+
+  it('falls back to raw confidence in unsampled bins', () => {
+    const curve = [0.1, null, null, null, 0.9];
+    expect(calibrateConfidence(0.5, curve)).toBe(0.5);
+    expect(calibrateConfidence(0.95, curve)).toBe(0.9);
+  });
+
+  it('ignores malformed curves', () => {
+    expect(calibrateConfidence(0.7, [0.5])).toBe(0.7);
   });
 });
