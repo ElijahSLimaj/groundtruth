@@ -87,6 +87,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
           const drift = await this.drift.runOnce(tenantId);
           const gaps = await this.gap.runOnce(tenantId);
           const coldStart = await this.coldStart.runOnce(tenantId);
+          const org = await this.coldStart.inferOrg(tenantId);
           const notified = await this.slackApp.notifyPending(tenantId);
           this.logger.log(
             JSON.stringify({
@@ -95,6 +96,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
               drift,
               gaps,
               cold_start: coldStart,
+              org_inference: org,
               slack_notified: notified,
             }),
           );

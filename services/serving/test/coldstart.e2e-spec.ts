@@ -275,4 +275,73 @@ suite('cold start (e2e)', () => {
     expect(result.chunksScanned).toBe(0);
     expect(fake.queue).toHaveLength(0);
   });
+
+  it('infers org structure from communication patterns', async () => {
+    await admin.query(`update tenants set entry_budget = 150 where id = $1`, [
+      tenantId,
+    ]);
+    const insertEvent = (author: string, threadKey: string) =>
+      admin.query(
+        `insert into events (id, tenant_id, connector_id, source_type, external_id,
+                             author_source_ref, thread_key, occurred_at, acl, payload_ref)
+         values (gen_random_uuid(), $1, $2, 'slack', gen_random_uuid()::text, $3, $4, now(), '{"scope": "tenant"}', 'payloads/x')`,
+        [tenantId, connectorId, author, threadKey],
+      );
+    for (let i = 0; i < 6; i++) {
+      await insertEvent('slack:ALICE', `C-ENG:${i}`);
+    }
+    for (let i = 0; i < 3; i++) {
+      await insertEvent('slack:BOB', `C-ENG:${i}`);
+    }
+    for (let i = 0; i < 5; i++) {
+      await insertEvent('slack:CAROL', `C-SALES:${i}`);
+    }
+
+    fake.queue.push({
+      entries: [
+        wireEntry({
+          statement:
+            'Engineering is led by ALICE and handles product development',
+          domain: 'org',
+          attributes_json:
+            '{"unit": "engineering", "lead": "slack:ALICE", "headcount": 2}',
+          confidence: 0.6,
+          source_chunk_indexes: [],
+          topic: 'engineering-unit',
+        }),
+      ],
+    });
+
+    const result = await coldStart.inferOrg(tenantId);
+    expect(result.alreadyInferred).toBe(false);
+    expect(result.authorsAnalyzed).toBeGreaterThanOrEqual(3);
+    expect(result.entriesDrafted).toBe(1);
+
+    const orgCall = fake.calls.find((c) =>
+      c.promptVersion.startsWith('coldstart-org'),
+    );
+    expect(orgCall).toBeDefined();
+    expect(orgCall?.user).toContain('C-ENG');
+    expect(orgCall?.user).toContain('slack:ALICE');
+
+    const entry = await admin.query(
+      `select ce.status from canon_entries ce
+       where ce.tenant_id = $1 and ce.domain = 'org'`,
+      [tenantId],
+    );
+    expect(entry.rows).toEqual([{ status: 'draft' }]);
+
+    const state = await admin.query<{ org_inferred_at: Date | null }>(
+      `select org_inferred_at from cold_start_state where tenant_id = $1`,
+      [tenantId],
+    );
+    expect(state.rows[0].org_inferred_at).not.toBeNull();
+  });
+
+  it('runs org inference exactly once', async () => {
+    const callsBefore = fake.calls.length;
+    const result = await coldStart.inferOrg(tenantId);
+    expect(result.alreadyInferred).toBe(true);
+    expect(fake.calls).toHaveLength(callsBefore);
+  });
 });

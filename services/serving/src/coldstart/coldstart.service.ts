@@ -10,7 +10,11 @@ import {
   COLDSTART_PROMPT_VERSION,
   COLDSTART_SYSTEM,
   coldStartUserPrompt,
+  ORG_INFERENCE_PROMPT_VERSION,
+  ORG_INFERENCE_SYSTEM,
+  orgInferenceUserPrompt,
 } from './prompts';
+import type { OrgAuthorStat, OrgChannelStat } from './prompts';
 import { ColdStartWire, wordOverlap } from './schemas';
 
 const CANDIDATE_PATTERNS =
@@ -28,6 +32,20 @@ export interface ColdStartRunResult {
   skippedDuplicates: number;
   budgetBlocked: number;
 }
+
+export interface OrgInferenceResult {
+  disabled: boolean;
+  alreadyInferred: boolean;
+  authorsAnalyzed: number;
+  entriesDrafted: number;
+  skippedDuplicates: number;
+  budgetBlocked: number;
+}
+
+type DraftCounters = Pick<
+  ColdStartRunResult,
+  'entriesDrafted' | 'skippedDuplicates' | 'budgetBlocked'
+>;
 
 export interface ReviewQueueItem {
   proposal_id: string;
@@ -82,15 +100,7 @@ export class ColdStartService {
     const candidates = scanned.filter((c) => c.decisionLike);
     result.candidates = candidates.length;
 
-    const reviewers = await this.db.withTenant(tenantId, async (client) => {
-      const admin = await client.query<{ id: string }>(
-        `select id from people where role = 'admin' order by email limit 1`,
-      );
-      const owner = await client.query<{ id: string }>(
-        `select id from people where role in ('admin', 'owner') order by role, email limit 1`,
-      );
-      return { adminId: admin.rows[0]?.id, ownerId: owner.rows[0]?.id };
-    });
+    const reviewers = await this.loadReviewers(tenantId);
     if (!reviewers.ownerId) {
       this.logger.warn('cold start run skipped, no admin or owner to route to');
       return result;
@@ -113,7 +123,14 @@ export class ColdStartService {
         ColdStartWire,
       );
       result.llmCalls++;
-      await this.persistEntries(tenantId, wire, batch, reviewers, result);
+      await this.persistEntries(
+        tenantId,
+        wire,
+        batch,
+        reviewers,
+        result,
+        COLDSTART_PROMPT_VERSION,
+      );
     }
 
     const last = scanned[scanned.length - 1];
@@ -130,6 +147,174 @@ export class ColdStartService {
       ),
     );
     return result;
+  }
+
+  async inferOrg(tenantId: string): Promise<OrgInferenceResult> {
+    const result: OrgInferenceResult = {
+      disabled: false,
+      alreadyInferred: false,
+      authorsAnalyzed: 0,
+      entriesDrafted: 0,
+      skippedDuplicates: 0,
+      budgetBlocked: 0,
+    };
+    if (!this.llm.enabled) {
+      result.disabled = true;
+      return result;
+    }
+
+    const alreadyInferred = await this.db.withTenant(
+      tenantId,
+      async (client) => {
+        const state = await client.query<{ org_inferred_at: Date | null }>(
+          `select org_inferred_at from cold_start_state where tenant_id = $1`,
+          [tenantId],
+        );
+        return state.rows[0]?.org_inferred_at != null;
+      },
+    );
+    if (alreadyInferred) {
+      result.alreadyInferred = true;
+      return result;
+    }
+
+    const stats = await this.db.withTenant(tenantId, (client) =>
+      this.communicationStats(client),
+    );
+    result.authorsAnalyzed = stats.authors.length;
+    if (stats.authors.length === 0) {
+      return result;
+    }
+
+    const reviewers = await this.loadReviewers(tenantId);
+    if (!reviewers.ownerId) {
+      this.logger.warn('org inference skipped, no admin or owner to route to');
+      return result;
+    }
+
+    const wire = await this.llm.completeJson(
+      {
+        model: this.config.driftTier3Model,
+        system: ORG_INFERENCE_SYSTEM,
+        user: orgInferenceUserPrompt(stats),
+        maxTokens: 4096,
+        promptVersion: ORG_INFERENCE_PROMPT_VERSION,
+      },
+      ColdStartWire,
+    );
+    await this.persistEntries(
+      tenantId,
+      wire,
+      [],
+      reviewers,
+      result,
+      ORG_INFERENCE_PROMPT_VERSION,
+    );
+
+    await this.db.withTenant(tenantId, (client) =>
+      client.query(
+        `insert into cold_start_state (tenant_id, org_inferred_at)
+         values ($1, now())
+         on conflict (tenant_id) do update
+         set org_inferred_at = now(), updated_at = now()`,
+        [tenantId],
+      ),
+    );
+    return result;
+  }
+
+  private async loadReviewers(
+    tenantId: string,
+  ): Promise<{ adminId?: string; ownerId?: string }> {
+    return this.db.withTenant(tenantId, async (client) => {
+      const admin = await client.query<{ id: string }>(
+        `select id from people where role = 'admin' order by email limit 1`,
+      );
+      const owner = await client.query<{ id: string }>(
+        `select id from people where role in ('admin', 'owner') order by role, email limit 1`,
+      );
+      return { adminId: admin.rows[0]?.id, ownerId: owner.rows[0]?.id };
+    });
+  }
+
+  private async communicationStats(client: PoolClient): Promise<{
+    authors: OrgAuthorStat[];
+    channels: OrgChannelStat[];
+  }> {
+    interface AuthorRow {
+      author: string;
+      messages: number;
+      channels: string[];
+      threads_started: number;
+    }
+    const authorRows = await client.query<AuthorRow>(
+      `
+      with recent as (
+        select coalesce(p.display_name, e.author_source_ref) as author,
+               split_part(e.thread_key, ':', 1) as channel,
+               e.thread_key, e.occurred_at
+        from events e
+        left join people p on p.id = e.author_id
+        where e.author_source_ref is not null and not e.tombstoned
+          and e.thread_key is not null
+          and e.occurred_at > now() - interval '90 days'
+      ),
+      starters as (
+        select distinct on (thread_key) thread_key, author
+        from recent order by thread_key, occurred_at
+      )
+      select r.author,
+             count(*)::int as messages,
+             (array_agg(distinct r.channel))[1:5] as channels,
+             (select count(*)::int from starters s where s.author = r.author) as threads_started
+      from recent r
+      group by r.author
+      order by messages desc
+      limit 20
+      `,
+    );
+    interface ChannelRow {
+      channel: string;
+      messages: number;
+      top_authors: string[];
+    }
+    const channelRows = await client.query<ChannelRow>(
+      `
+      with recent as (
+        select coalesce(p.display_name, e.author_source_ref) as author,
+               split_part(e.thread_key, ':', 1) as channel
+        from events e
+        left join people p on p.id = e.author_id
+        where e.author_source_ref is not null and not e.tombstoned
+          and e.thread_key is not null
+          and e.occurred_at > now() - interval '90 days'
+      ),
+      by_channel_author as (
+        select channel, author, count(*) as n
+        from recent group by channel, author
+      )
+      select channel,
+             sum(n)::int as messages,
+             (array_agg(author order by n desc))[1:3] as top_authors
+      from by_channel_author
+      group by channel
+      order by messages desc
+      limit 15
+      `,
+    );
+    return {
+      authors: authorRows.rows.map((r) => ({
+        author: r.author,
+        messages: r.messages,
+        channels: r.channels,
+        threadsStarted: r.threads_started,
+      })),
+      channels: channelRows.rows.map((r) => ({
+        channel: r.channel,
+        messages: r.messages,
+        topAuthors: r.top_authors,
+      })),
+    };
   }
 
   async reviewQueue(tenantId: string): Promise<ReviewQueueItem[]> {
@@ -182,7 +367,8 @@ export class ColdStartService {
     wire: ColdStartWire,
     batch: CandidateChunk[],
     reviewers: { adminId?: string; ownerId?: string },
-    result: ColdStartRunResult,
+    result: DraftCounters,
+    promptVersion: string,
   ): Promise<void> {
     const seenTopics = new Set<string>();
 
@@ -278,7 +464,7 @@ export class ColdStartService {
                 tier: entry.tier,
                 topic: entry.topic,
                 confidence: entry.confidence,
-                prompt_version: COLDSTART_PROMPT_VERSION,
+                prompt_version: promptVersion,
               }),
             ],
           );
