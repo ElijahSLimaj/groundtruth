@@ -4,7 +4,7 @@ import { PageHeader } from '../../../components/page-header';
 import { Receipt } from '../../../components/receipt';
 import { TrustBadge } from '../../../components/trust-badge';
 import { withTenant } from '../../../lib/db';
-import { getViewer } from '../../../lib/session';
+import { requireViewer } from '../../../lib/session';
 import { entryTrust, formatDate } from '../../../lib/trust';
 
 export const dynamic = 'force-dynamic';
@@ -13,7 +13,7 @@ export default async function EntryPage(props: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await props.params;
-  const viewer = getViewer();
+  const viewer = await requireViewer();
 
   const data = await withTenant(viewer.tenantId, async (client) => {
     const entry = await client.query<{

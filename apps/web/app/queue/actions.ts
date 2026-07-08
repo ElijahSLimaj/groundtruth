@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { PoolClient } from 'pg';
 
 import { withTenant } from '../../lib/db';
-import { getViewer } from '../../lib/session';
+import { requireViewer } from '../../lib/session';
 
 interface ProposalRow {
   id: string;
@@ -50,7 +50,7 @@ export async function approveProposal(formData: FormData): Promise<void> {
   if (!proposalId) {
     throw new Error('proposal_id is required');
   }
-  const viewer = getViewer();
+  const viewer = await requireViewer();
 
   await withTenant(viewer.tenantId, async (client) => {
     const proposal = await loadProposal(client, proposalId);
@@ -116,7 +116,7 @@ export async function rejectProposal(formData: FormData): Promise<void> {
   if (!proposalId) {
     throw new Error('proposal_id is required');
   }
-  const viewer = getViewer();
+  const viewer = await requireViewer();
 
   await withTenant(viewer.tenantId, async (client) => {
     const proposal = await loadProposal(client, proposalId);

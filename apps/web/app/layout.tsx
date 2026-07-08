@@ -3,6 +3,8 @@ import { Archivo, Instrument_Sans, JetBrains_Mono } from 'next/font/google';
 import Link from 'next/link';
 import './globals.css';
 
+import { getViewer } from '../lib/session';
+
 const archivo = Archivo({
   variable: '--font-archivo',
   subsets: ['latin'],
@@ -34,9 +36,10 @@ const NAV = [
   { href: '/audit', label: 'Audit' },
 ];
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const viewer = await getViewer();
   return (
     <html
       lang="en"
@@ -65,7 +68,20 @@ export default function RootLayout({
                 </li>
               ))}
             </ul>
-            <div className="mt-auto px-3">
+            <div className="mt-auto flex flex-col gap-3 px-3">
+              {viewer ? (
+                <form action="/api/auth/logout" method="post">
+                  <p className="text-xs text-ink-secondary">
+                    {viewer.displayName}
+                  </p>
+                  <button
+                    type="submit"
+                    className="mt-1 text-xs text-ink-muted underline hover:text-ink"
+                  >
+                    Sign out
+                  </button>
+                </form>
+              ) : null}
               <p className="eyebrow text-ink-muted">truth has a receipt</p>
             </div>
           </nav>

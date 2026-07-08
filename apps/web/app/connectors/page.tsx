@@ -1,6 +1,6 @@
 import { EmptyState, PageHeader } from '../../components/page-header';
 import { withTenant } from '../../lib/db';
-import { getViewer } from '../../lib/session';
+import { requireViewer } from '../../lib/session';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,7 +11,7 @@ const STATUS_TONE: Record<string, string> = {
 };
 
 export default async function ConnectorsPage() {
-  const viewer = getViewer();
+  const viewer = await requireViewer();
 
   const connectors = await withTenant(viewer.tenantId, async (client) => {
     const rows = await client.query<{

@@ -1,6 +1,6 @@
 import { EmptyState, PageHeader } from '../../components/page-header';
 import { withTenant } from '../../lib/db';
-import { getViewer } from '../../lib/session';
+import { requireViewer } from '../../lib/session';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,7 +8,7 @@ export default async function AuditPage(props: {
   searchParams: Promise<{ action?: string }>;
 }) {
   const { action } = await props.searchParams;
-  const viewer = getViewer();
+  const viewer = await requireViewer();
 
   const rows = await withTenant(viewer.tenantId, async (client) => {
     const result = await client.query<{

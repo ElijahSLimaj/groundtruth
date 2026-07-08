@@ -4,7 +4,7 @@ import { HealthRing } from '../../components/health-ring';
 import { EmptyState, PageHeader } from '../../components/page-header';
 import { TrustBadge } from '../../components/trust-badge';
 import { withTenant } from '../../lib/db';
-import { getViewer } from '../../lib/session';
+import { requireViewer } from '../../lib/session';
 import { entryTrust, formatDate } from '../../lib/trust';
 
 export const dynamic = 'force-dynamic';
@@ -28,7 +28,7 @@ export default async function CanonPage(props: {
   searchParams: Promise<{ domain?: string }>;
 }) {
   const { domain } = await props.searchParams;
-  const viewer = getViewer();
+  const viewer = await requireViewer();
 
   const { entries, health } = await withTenant(viewer.tenantId, async (client) => {
     const health = await client.query<HealthRow>(

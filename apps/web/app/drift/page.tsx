@@ -3,13 +3,13 @@ import Link from 'next/link';
 import { HealthRing } from '../../components/health-ring';
 import { EmptyState, PageHeader } from '../../components/page-header';
 import { withTenant } from '../../lib/db';
-import { getViewer } from '../../lib/session';
+import { requireViewer } from '../../lib/session';
 import { formatDate } from '../../lib/trust';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DriftPage() {
-  const viewer = getViewer();
+  const viewer = await requireViewer();
 
   const data = await withTenant(viewer.tenantId, async (client) => {
     const stats = await client.query<{

@@ -13,6 +13,19 @@ function getPool(): Pool {
   return pool;
 }
 
+export async function withApp<T>(
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  const client = await getPool().connect();
+  try {
+    await client.query('set role brain_app');
+    return await fn(client);
+  } finally {
+    await client.query('reset role').catch(() => undefined);
+    client.release();
+  }
+}
+
 export async function withTenant<T>(
   tenantId: string,
   fn: (client: PoolClient) => Promise<T>,

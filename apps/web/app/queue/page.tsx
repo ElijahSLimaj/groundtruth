@@ -1,7 +1,7 @@
 import { AttributesDiff, DiffView } from '../../components/diff-view';
 import { EmptyState, PageHeader } from '../../components/page-header';
 import { loadQueue } from '../../lib/queue';
-import { getViewer } from '../../lib/session';
+import { requireViewer } from '../../lib/session';
 import { formatDate } from '../../lib/trust';
 import { approveProposal, rejectProposal } from './actions';
 import { QueueKeys } from './queue-keys';
@@ -17,7 +17,7 @@ const REJECT_REASONS = [
 ] as const;
 
 export default async function QueuePage() {
-  const viewer = getViewer();
+  const viewer = await requireViewer();
   const { pending, queuedCount } = await loadQueue(viewer);
   const current = pending[0];
 
