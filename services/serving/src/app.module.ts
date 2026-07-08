@@ -6,6 +6,7 @@ import { CanonModule } from './canon/canon.module';
 import { ColdStartModule } from './coldstart/coldstart.module';
 import { DatabaseModule } from './database/database.module';
 import { DriftModule } from './drift/drift.module';
+import { McpModule } from './mcp/mcp.module';
 import { SchedulerModule } from './scheduler/scheduler.module';
 import { SlackAppModule } from './slackapp/slackapp.module';
 
@@ -18,6 +19,7 @@ import { SlackAppModule } from './slackapp/slackapp.module';
     ColdStartModule,
     SlackAppModule,
     SchedulerModule,
+    McpModule,
   ],
   controllers: [AppController],
   providers: [AppService],

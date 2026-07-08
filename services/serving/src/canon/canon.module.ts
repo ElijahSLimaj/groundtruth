@@ -20,6 +20,6 @@ import { EMBEDDER, FakeEmbedder } from './embedder';
     },
     CanonService,
   ],
-  exports: [EMBEDDER],
+  exports: [EMBEDDER, CanonService],
 })
 export class CanonModule {}
