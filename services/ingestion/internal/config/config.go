@@ -14,6 +14,8 @@ type Config struct {
 	S3Bucket        string
 	S3Endpoint      string
 	S3Region        string
+	WebhookAddr     string
+	SlackSecret     string
 	PollInterval    time.Duration
 	HealthInterval  time.Duration
 	ProcessBatch    int
@@ -28,6 +30,8 @@ func Load(getenv func(string) string) (Config, error) {
 		S3Bucket:        getenv("S3_BUCKET"),
 		S3Endpoint:      getenv("S3_ENDPOINT"),
 		S3Region:        getenv("S3_REGION"),
+		WebhookAddr:     getenv("WEBHOOK_ADDR"),
+		SlackSecret:     getenv("SLACK_SIGNING_SECRET"),
 		PollInterval:    30 * time.Second,
 		HealthInterval:  5 * time.Minute,
 		ProcessBatch:    100,
@@ -40,6 +44,9 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 	if cfg.S3Bucket != "" && cfg.MasterKeyHex == "" {
 		return cfg, fmt.Errorf("MASTER_KEY is required when payloads go to object storage")
+	}
+	if cfg.WebhookAddr != "" && cfg.SlackSecret == "" {
+		return cfg, fmt.Errorf("SLACK_SIGNING_SECRET is required when the webhook receiver is enabled")
 	}
 
 	var err error

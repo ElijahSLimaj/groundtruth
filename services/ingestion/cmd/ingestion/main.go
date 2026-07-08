@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"sync"
@@ -24,6 +25,7 @@ import (
 	"github.com/attempttechnologies/company-brain/services/ingestion/runtime"
 	"github.com/attempttechnologies/company-brain/services/ingestion/slack"
 	"github.com/attempttechnologies/company-brain/services/ingestion/store"
+	"github.com/attempttechnologies/company-brain/services/ingestion/webhook"
 )
 
 func main() {
@@ -77,6 +79,19 @@ func run(logger *slog.Logger) error {
 		"process_batch", cfg.ProcessBatch)
 
 	var wg sync.WaitGroup
+	if cfg.WebhookAddr != "" {
+		receiver := &webhook.SlackReceiver{
+			Pool:          pool,
+			Runner:        runner,
+			SigningSecret: cfg.SlackSecret,
+			Logger:        logger,
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			serveWebhooks(ctx, logger, cfg.WebhookAddr, receiver)
+		}()
+	}
 	wg.Add(3)
 	go func() {
 		defer wg.Done()
@@ -93,6 +108,28 @@ func run(logger *slog.Logger) error {
 	wg.Wait()
 	logger.Info("ingestion stopped")
 	return ctx.Err()
+}
+
+func serveWebhooks(ctx context.Context, logger *slog.Logger, addr string, receiver *webhook.SlackReceiver) {
+	mux := http.NewServeMux()
+	mux.Handle("/webhooks/slack", receiver)
+	server := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			logger.Error("webhook_shutdown", "error", err)
+		}
+	}()
+	logger.Info("webhook receiver started", "addr", addr)
+	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		logger.Error("webhook_server", "error", err)
+	}
 }
 
 func buildPayloadStore(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger) (store.PayloadStore, error) {

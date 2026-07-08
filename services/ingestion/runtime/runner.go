@@ -19,6 +19,8 @@ const (
 	StatusDegraded = "degraded"
 )
 
+var ErrConnectorNotLive = errors.New("connector is not live")
+
 type Normalizer interface {
 	Normalize(cfg connector.Config, item connector.RawItem, acl connector.ACL) (connector.NormalizedEvent, error)
 }
@@ -75,6 +77,19 @@ func (r *Runner) RunPollCycle(ctx context.Context, connectorID uuid.UUID) (Cycle
 	}
 	result.Cursor = next
 	return result, nil
+}
+
+func (r *Runner) IngestItem(ctx context.Context, connectorID uuid.UUID, item connector.RawItem) error {
+	row, conn, norm, err := r.resolve(ctx, connectorID)
+	if err != nil {
+		return err
+	}
+	if row.Status != StatusLive {
+		return ErrConnectorNotLive
+	}
+	cfg := configFor(connectorID, row)
+	sink := &enqueueSink{pool: r.Pool, conn: conn, norm: norm, cfg: cfg}
+	return sink.Emit(ctx, item)
 }
 
 func (r *Runner) RunBackfill(ctx context.Context, connectorID uuid.UUID, window connector.BackfillWindow) (CycleResult, error) {
