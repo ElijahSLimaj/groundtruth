@@ -135,6 +135,11 @@ type EventSpec struct {
 
 func InsertEvent(t *testing.T, admin *pgxpool.Pool, f Fixture, spec EventSpec) uuid.UUID {
 	t.Helper()
+	return InsertEventWithSource(t, admin, f, spec, "slack")
+}
+
+func InsertEventWithSource(t *testing.T, admin *pgxpool.Pool, f Fixture, spec EventSpec, sourceType string) uuid.UUID {
+	t.Helper()
 	ctx := context.Background()
 	id := uuid.New()
 
@@ -165,9 +170,9 @@ func InsertEvent(t *testing.T, admin *pgxpool.Pool, f Fixture, spec EventSpec) u
 			id, tenant_id, connector_id, source_type, external_id,
 			author_source_ref, thread_key, occurred_at, ingested_at, acl, payload_ref
 		)
-		values ($1, $2, $3, 'slack', $4, nullif($5, ''), $6, $7, $8, $9, $10)
+		values ($1, $2, $3, $11, $4, nullif($5, ''), $6, $7, $8, $9, $10)
 	`, id, f.TenantID, f.ConnectorID, id.String(), spec.Author, spec.ThreadKey,
-		spec.OccurredAt, ingested, acl, "payloads/"+f.TenantID.String()+"/"+digest)
+		spec.OccurredAt, ingested, acl, "payloads/"+f.TenantID.String()+"/"+digest, sourceType)
 	if err != nil {
 		t.Fatal(err)
 	}

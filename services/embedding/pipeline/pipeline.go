@@ -203,7 +203,7 @@ func (p *Pipeline) scanEvents(ctx context.Context, wmTime time.Time, wmID uuid.U
 	rows, err := p.Pool.Query(ctx, `
 		select `+eventColumns+`
 		from events
-		where source_type = 'slack' and (ingested_at, id) > ($1, $2)
+		where source_type in ('slack', 'gmail') and (ingested_at, id) > ($1, $2)
 		order by ingested_at, id
 		limit $3
 	`, wmTime, wmID, p.scanLimit())
@@ -241,7 +241,7 @@ func (p *Pipeline) processTenant(ctx context.Context, model string, tenantID uui
 	if err != nil {
 		return 0, 0, err
 	}
-	chunks := chunker.ChunkChat(messages)
+	chunks := chunkBySource(messages)
 
 	scannedSet := map[uuid.UUID]bool{}
 	for _, ev := range scanned {
@@ -297,7 +297,7 @@ func (p *Pipeline) processTenant(ctx context.Context, model string, tenantID uui
 		if err != nil {
 			return 0, 0, err
 		}
-		chunks = chunker.ChunkChat(messages)
+		chunks = chunkBySource(messages)
 	}
 
 	windows := map[string]bool{}
@@ -327,6 +327,21 @@ func (p *Pipeline) processTenant(ctx context.Context, model string, tenantID uui
 	return len(embedded), deadLettered, nil
 }
 
+func chunkBySource(messages []chunker.Message) []chunker.Chunk {
+	var chat []chunker.Message
+	var email []chunker.Message
+	for _, message := range messages {
+		if message.SourceType == "gmail" {
+			email = append(email, message)
+			continue
+		}
+		chat = append(chat, message)
+	}
+	chunks := chunker.ChunkChat(chat)
+	chunks = append(chunks, chunker.ChunkEmail(email)...)
+	return chunks
+}
+
 func keys(set map[uuid.UUID]bool) []uuid.UUID {
 	out := make([]uuid.UUID, 0, len(set))
 	for id := range set {
@@ -338,6 +353,22 @@ func keys(set map[uuid.UUID]bool) []uuid.UUID {
 func (p *Pipeline) fetchWindows(ctx context.Context, tenantID uuid.UUID, windowKeys []string) ([]scannedEvent, error) {
 	var all []scannedEvent
 	for _, key := range windowKeys {
+		if eventID, isEmail := strings.CutPrefix(key, "email:"); isEmail {
+			rows, err := p.Pool.Query(ctx, `
+				select `+eventColumns+`
+				from events
+				where tenant_id = $1 and id = $2::uuid
+			`, tenantID, eventID)
+			if err != nil {
+				return nil, fmt.Errorf("fetch window %q: %w", key, err)
+			}
+			events, err := collectEvents(rows)
+			if err != nil {
+				return nil, err
+			}
+			all = append(all, events...)
+			continue
+		}
 		channel, hourRaw, isHourWindow := strings.Cut(key, "@")
 		var rows pgx.Rows
 		var err error
@@ -349,7 +380,7 @@ func (p *Pipeline) fetchWindows(ctx context.Context, tenantID uuid.UUID, windowK
 			rows, err = p.Pool.Query(ctx, `
 				select `+eventColumns+`
 				from events
-				where source_type = 'slack' and tenant_id = $1
+				where source_type in ('slack', 'gmail') and tenant_id = $1
 				  and thread_key like $2
 				  and occurred_at >= $3 and occurred_at < $4
 			`, tenantID, channel+":%", hour, hour.Add(time.Hour))
@@ -357,7 +388,7 @@ func (p *Pipeline) fetchWindows(ctx context.Context, tenantID uuid.UUID, windowK
 			rows, err = p.Pool.Query(ctx, `
 				select `+eventColumns+`
 				from events
-				where source_type = 'slack' and tenant_id = $1 and thread_key = $2
+				where source_type in ('slack', 'gmail') and tenant_id = $1 and thread_key = $2
 			`, tenantID, key)
 		}
 		if err != nil {
@@ -385,7 +416,7 @@ func (p *Pipeline) fetchContext(ctx context.Context, tenantID uuid.UUID, scanned
 	rows, err := p.Pool.Query(ctx, `
 		select `+eventColumns+`
 		from events
-		where source_type = 'slack' and tenant_id = $1 and thread_key = any($2)
+		where source_type in ('slack', 'gmail') and tenant_id = $1 and thread_key = any($2)
 	`, tenantID, keys)
 	if err != nil {
 		return nil, fmt.Errorf("fetch threads: %w", err)
@@ -410,7 +441,7 @@ func (p *Pipeline) fetchContext(ctx context.Context, tenantID uuid.UUID, scanned
 	}
 	seen := map[hourWindow]bool{}
 	for _, ev := range events {
-		if threadSizes[ev.ThreadKey] >= 2 {
+		if ev.SourceType != "slack" || threadSizes[ev.ThreadKey] >= 2 {
 			continue
 		}
 		w := hourWindow{channelOf(ev.ThreadKey), ev.OccurredAt.UTC().Truncate(time.Hour)}
@@ -421,7 +452,7 @@ func (p *Pipeline) fetchContext(ctx context.Context, tenantID uuid.UUID, scanned
 		peerRows, err := p.Pool.Query(ctx, `
 			select `+eventColumns+`
 			from events
-			where source_type = 'slack' and tenant_id = $1
+			where source_type in ('slack', 'gmail') and tenant_id = $1
 			  and thread_key like $2
 			  and occurred_at >= $3 and occurred_at < $4
 		`, tenantID, w.channel+":%", w.hour, w.hour.Add(time.Hour))
