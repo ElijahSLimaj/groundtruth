@@ -27,7 +27,7 @@ export default async function LoginPage({
   const message = error ? ERROR_MESSAGES[error] : null;
 
   return (
-    <div className="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center">
+    <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6">
       <div className="rounded-card border border-line bg-surface px-8 py-10">
         <p className="eyebrow text-ink-muted">Company Brain</p>
         <h1 className="mt-2 font-display font-extrabold text-2xl text-ink">

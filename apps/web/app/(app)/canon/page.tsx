@@ -1,11 +1,11 @@
 import Link from 'next/link';
 
-import { HealthRing } from '../../components/health-ring';
-import { EmptyState, PageHeader } from '../../components/page-header';
-import { TrustBadge } from '../../components/trust-badge';
-import { withTenant } from '../../lib/db';
-import { requireViewer } from '../../lib/session';
-import { entryTrust, formatDate } from '../../lib/trust';
+import { HealthRing } from '../../../components/health-ring';
+import { EmptyState, PageHeader } from '../../../components/page-header';
+import { TrustBadge } from '../../../components/trust-badge';
+import { withTenant } from '../../../lib/db';
+import { requireViewer } from '../../../lib/session';
+import { entryTrust, formatDate } from '../../../lib/trust';
 
 export const dynamic = 'force-dynamic';
 

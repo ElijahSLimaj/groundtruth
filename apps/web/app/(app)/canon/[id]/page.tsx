@@ -1,11 +1,11 @@
 import { notFound } from 'next/navigation';
 
-import { PageHeader } from '../../../components/page-header';
-import { Receipt } from '../../../components/receipt';
-import { TrustBadge } from '../../../components/trust-badge';
-import { withTenant } from '../../../lib/db';
-import { requireViewer } from '../../../lib/session';
-import { entryTrust, formatDate } from '../../../lib/trust';
+import { PageHeader } from '../../../../components/page-header';
+import { Receipt } from '../../../../components/receipt';
+import { TrustBadge } from '../../../../components/trust-badge';
+import { withTenant } from '../../../../lib/db';
+import { requireViewer } from '../../../../lib/session';
+import { entryTrust, formatDate } from '../../../../lib/trust';
 
 export const dynamic = 'force-dynamic';
 

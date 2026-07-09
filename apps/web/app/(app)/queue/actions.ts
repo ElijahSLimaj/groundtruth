@@ -3,8 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { PoolClient } from 'pg';
 
-import { withTenant } from '../../lib/db';
-import { requireViewer } from '../../lib/session';
+import { withTenant } from '../../../lib/db';
+import { requireViewer } from '../../../lib/session';
 
 interface ProposalRow {
   id: string;

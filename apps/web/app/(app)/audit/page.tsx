@@ -1,6 +1,6 @@
-import { EmptyState, PageHeader } from '../../components/page-header';
-import { withTenant } from '../../lib/db';
-import { requireViewer } from '../../lib/session';
+import { EmptyState, PageHeader } from '../../../components/page-header';
+import { withTenant } from '../../../lib/db';
+import { requireViewer } from '../../../lib/session';
 
 export const dynamic = 'force-dynamic';
 

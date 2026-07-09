@@ -1,8 +1,8 @@
-import { AttributesDiff, DiffView } from '../../components/diff-view';
-import { EmptyState, PageHeader } from '../../components/page-header';
-import { loadQueue } from '../../lib/queue';
-import { requireViewer } from '../../lib/session';
-import { formatDate } from '../../lib/trust';
+import { AttributesDiff, DiffView } from '../../../components/diff-view';
+import { EmptyState, PageHeader } from '../../../components/page-header';
+import { loadQueue } from '../../../lib/queue';
+import { requireViewer } from '../../../lib/session';
+import { formatDate } from '../../../lib/trust';
 import { approveProposal, rejectProposal } from './actions';
 import { QueueKeys } from './queue-keys';
 
