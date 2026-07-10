@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { getViewer } from '../../lib/session';
 
 const NAV = [
+  { href: '/chat', label: 'Chat' },
   { href: '/drift', label: 'Drift' },
   { href: '/queue', label: 'Queue' },
   { href: '/canon', label: 'Canon' },
