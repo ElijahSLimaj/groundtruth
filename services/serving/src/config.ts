@@ -20,6 +20,8 @@ export interface ServingConfig {
   s3Bucket: string | null;
   s3Endpoint: string | null;
   s3Region: string | null;
+  chatModel: string;
+  internalApiSecret: string | null;
 }
 
 export function loadConfig(
@@ -53,5 +55,7 @@ export function loadConfig(
     s3Bucket: env.S3_BUCKET ?? null,
     s3Endpoint: env.S3_ENDPOINT ?? null,
     s3Region: env.S3_REGION ?? null,
+    chatModel: env.CHAT_MODEL ?? 'claude-fable-5',
+    internalApiSecret: env.INTERNAL_API_SECRET ?? null,
   };
 }
