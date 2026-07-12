@@ -43,8 +43,22 @@ func run(logger *slog.Logger) error {
 		}
 		interval = parsed
 	}
-	if kind := os.Getenv("EMBEDDING_PROVIDER"); kind != "" && kind != "fake" {
-		return fmt.Errorf("unsupported EMBEDDING_PROVIDER %q, only fake is implemented", kind)
+	var embedProvider provider.Provider
+	switch kind := os.Getenv("EMBEDDING_PROVIDER"); kind {
+	case "", "fake":
+		embedProvider = provider.NewFake()
+	case "voyage":
+		apiKey := os.Getenv("VOYAGE_API_KEY")
+		if apiKey == "" {
+			return fmt.Errorf("VOYAGE_API_KEY is required for the voyage provider")
+		}
+		voyage := provider.NewVoyage(apiKey)
+		if model := os.Getenv("VOYAGE_MODEL"); model != "" {
+			voyage.Model = model
+		}
+		embedProvider = voyage
+	default:
+		return fmt.Errorf("unsupported EMBEDDING_PROVIDER %q", kind)
 	}
 
 	poolCfg, err := pgxpool.ParseConfig(databaseURL)
@@ -70,10 +84,12 @@ func run(logger *slog.Logger) error {
 
 	p := &pipeline.Pipeline{
 		Pool:     pool,
-		Provider: provider.NewFake(),
+		Provider: embedProvider,
 		Payloads: &payload.FSReader{Root: payloadRoot},
 	}
-	logger.Info("embedding started", "interval", interval.String())
+	logger.Info("embedding started",
+		"interval", interval.String(),
+		"model", embedProvider.ModelID())
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()

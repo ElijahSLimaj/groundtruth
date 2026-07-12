@@ -22,6 +22,7 @@ export interface ServingConfig {
   s3Region: string | null;
   chatModel: string;
   internalApiSecret: string | null;
+  voyageApiKey: string | null;
 }
 
 export function loadConfig(
@@ -41,7 +42,9 @@ export function loadConfig(
     anthropicApiKey: env.ANTHROPIC_API_KEY ?? null,
     driftTier2Model: env.DRIFT_TIER2_MODEL ?? 'claude-haiku-4-5',
     driftTier3Model: env.DRIFT_TIER3_MODEL ?? 'claude-opus-4-8',
-    embeddingModel: env.EMBEDDING_MODEL ?? 'fake-embedder-v1',
+    embeddingModel:
+      env.EMBEDDING_MODEL ??
+      (env.VOYAGE_API_KEY ? 'voyage-large-2' : 'fake-embedder-v1'),
     slackBotToken: env.SLACK_BOT_TOKEN ?? null,
     slackSigningSecret: env.SLACK_SIGNING_SECRET ?? null,
     slackApprovalChannel: env.SLACK_APPROVAL_CHANNEL ?? null,
@@ -57,5 +60,6 @@ export function loadConfig(
     s3Region: env.S3_REGION ?? null,
     chatModel: env.CHAT_MODEL ?? 'claude-fable-5',
     internalApiSecret: env.INTERNAL_API_SECRET ?? null,
+    voyageApiKey: env.VOYAGE_API_KEY ?? null,
   };
 }

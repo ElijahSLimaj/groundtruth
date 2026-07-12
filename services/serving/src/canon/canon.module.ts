@@ -6,7 +6,7 @@ import type { ServingConfig } from '../config';
 import { DriftModule } from '../drift/drift.module';
 import { CanonController } from './canon.controller';
 import { CanonService } from './canon.service';
-import { EMBEDDER, FakeEmbedder } from './embedder';
+import { EMBEDDER, FakeEmbedder, VoyageEmbedder } from './embedder';
 
 @Module({
   imports: [AuthModule, DriftModule],
@@ -16,7 +16,9 @@ import { EMBEDDER, FakeEmbedder } from './embedder';
       provide: EMBEDDER,
       inject: [SERVING_CONFIG],
       useFactory: (config: ServingConfig) =>
-        new FakeEmbedder(config.embeddingModel),
+        config.voyageApiKey
+          ? new VoyageEmbedder(config.voyageApiKey, config.embeddingModel)
+          : new FakeEmbedder(config.embeddingModel),
     },
     CanonService,
   ],
