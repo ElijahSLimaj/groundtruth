@@ -635,6 +635,7 @@ func (p *Pipeline) deadLetter(ctx context.Context, tenantID, eventID uuid.UUID, 
 	_, err := p.Pool.Exec(ctx, `
 		insert into embedding_dlq (tenant_id, event_id, chunk_index, reason)
 		values ($1, $2, $3, $4)
+		on conflict do nothing
 	`, tenantID, eventID, chunkIndex, reason)
 	if err != nil {
 		return fmt.Errorf("embedding dead letter: %w", err)
