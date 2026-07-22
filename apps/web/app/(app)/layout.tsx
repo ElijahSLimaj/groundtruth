@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { BrandMark } from '../../components/brand-mark';
 import { getViewer } from '../../lib/session';
 
 const NAV = [
@@ -21,7 +22,8 @@ export default async function AppLayout({
         aria-label="Primary"
         className="w-60 shrink-0 border-r border-line bg-surface px-4 py-6 flex flex-col gap-8"
       >
-        <Link href="/drift" className="block px-2">
+        <Link href="/drift" className="flex items-center gap-2.5 px-2">
+          <BrandMark size={28} />
           <span className="font-display font-extrabold text-md tracking-tight">
             COMPANY BRAIN
           </span>

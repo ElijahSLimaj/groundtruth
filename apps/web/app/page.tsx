@@ -1,16 +1,18 @@
-import Link from 'next/link';
-
-const PILOT_MAILTO =
-  'mailto:elijah@attempttechnologies.io?subject=Company%20Brain%20pilot&body=Company%20name%2C%20headcount%2C%20and%20the%20tools%20you%20want%20connected%3A';
+import { BrainConstellation } from '../components/brain-constellation';
+import { BrandMark } from '../components/brand-mark';
+import { CAL_LINK, CAL_NAMESPACE, CalEmbed } from '../components/cal-embed';
 
 function CtaButton({ label }: { label: string }) {
   return (
-    <a
-      href={PILOT_MAILTO}
+    <button
+      type="button"
+      data-cal-namespace={CAL_NAMESPACE}
+      data-cal-link={CAL_LINK}
+      data-cal-config='{"layout":"month_view"}'
       className="inline-block rounded-control bg-action px-6 py-3 text-sm font-medium text-void transition-opacity duration-150 hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action"
     >
       {label}
-    </a>
+    </button>
   );
 }
 
@@ -193,50 +195,60 @@ const TIERS = [
 export default function LandingPage() {
   return (
     <div className="min-h-screen">
+      <CalEmbed />
       <header className="sticky top-0 z-10 border-b border-line bg-void/90 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <span className="font-display text-md font-extrabold tracking-tight">
-            COMPANY BRAIN
+          <span className="flex items-center gap-2.5">
+            <BrandMark size={28} />
+            <span className="font-display text-md font-extrabold tracking-tight">
+              COMPANY BRAIN
+            </span>
           </span>
           <nav aria-label="Landing" className="flex items-center gap-6">
-            <Link
-              href="/login"
+            <a
+              href="#pricing"
               className="text-sm text-ink-secondary hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-action"
             >
-              Sign in
-            </Link>
-            <a
-              href={PILOT_MAILTO}
+              Pricing
+            </a>
+            <button
+              type="button"
+              data-cal-namespace={CAL_NAMESPACE}
+              data-cal-link={CAL_LINK}
+              data-cal-config='{"layout":"month_view"}'
               className="rounded-control bg-action px-4 py-2 text-sm font-medium text-void transition-opacity duration-150 hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action"
             >
               Start a pilot
-            </a>
+            </button>
           </nav>
         </div>
       </header>
 
       <main className="mx-auto max-w-5xl px-6">
-        <section className="grid items-center gap-12 py-20 md:grid-cols-2 md:py-28">
-          <div>
-            <p className="eyebrow text-ink-muted">
-              Governed knowledge for companies deploying AI
-            </p>
-            <h1 className="mt-4 font-display text-2xl font-extrabold leading-tight tracking-tight text-ink">
-              Your AI agents are confidently wrong about your company.
-            </h1>
-            <p className="mt-5 max-w-md text-md text-ink-secondary">
-              Company Brain is the knowledge layer where every answer carries a
-              receipt: source, owner, and freshness. The same governed canon for
-              your team and your agents, with the same permissions.
-            </p>
-            <div className="mt-8 flex items-center gap-5">
-              <CtaButton label="Start a 30-day pilot" />
-              <span className="text-xs text-ink-muted">
-                Money back if the drafted canon is not useful.
-              </span>
+        <section className="relative overflow-hidden py-20 md:py-28">
+          <BrainConstellation className="pointer-events-none absolute left-1/2 top-1/2 hidden w-[1040px] max-w-none -translate-x-1/2 -translate-y-1/2 opacity-45 md:block" />
+          <div className="relative z-10 grid items-center gap-12 md:grid-cols-2">
+            <div>
+              <p className="eyebrow text-ink-muted">
+                Governed knowledge for companies deploying AI
+              </p>
+              <h1 className="mt-4 font-display text-2xl font-extrabold leading-tight tracking-tight text-ink">
+                Your AI agents are confidently wrong about your company.
+              </h1>
+              <p className="mt-5 max-w-md text-md text-ink-secondary">
+                Company Brain is the knowledge layer where every answer carries
+                a receipt: source, owner, and freshness. The same governed canon
+                for your team and your agents, with the same permissions.
+              </p>
+              <div className="mt-8 flex items-center gap-5">
+                <CtaButton label="Start a 30-day pilot" />
+                <span className="text-xs text-ink-muted">
+                  Money back if the drafted canon is not useful.
+                </span>
+              </div>
             </div>
+            <ReceiptedAnswer />
           </div>
-          <ReceiptedAnswer />
         </section>
 
         <section aria-label="The wall" className="border-t border-line py-20">
@@ -365,7 +377,11 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section aria-label="Pricing" className="border-t border-line py-20">
+        <section
+          id="pricing"
+          aria-label="Pricing"
+          className="scroll-mt-24 border-t border-line py-20"
+        >
           <SectionHeading
             eyebrow="Pricing"
             title="A platform fee, never per seat"
@@ -433,13 +449,16 @@ export default function LandingPage() {
 
       <footer className="border-t border-line">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-8">
-          <p className="eyebrow text-ink-muted">truth has a receipt</p>
-          <Link
-            href="/login"
+          <span className="flex items-center gap-2.5">
+            <BrandMark size={24} />
+            <p className="eyebrow text-ink-muted">truth has a receipt</p>
+          </span>
+          <a
+            href="#pricing"
             className="text-sm text-ink-secondary hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-action"
           >
-            Sign in
-          </Link>
+            Pricing
+          </a>
         </div>
       </footer>
     </div>

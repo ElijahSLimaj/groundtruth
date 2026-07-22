@@ -73,9 +73,78 @@ body {
   overflow: hidden;
 }
 
+@keyframes brain-breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes brain-halo {
+  0%,
+  100% {
+    opacity: 0.08;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 0.28;
+    transform: scale(1.15);
+  }
+}
+
+@keyframes brain-flow {
+  from {
+    stroke-dashoffset: 100;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes brain-drift {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.brain-node {
+  animation: brain-breathe 4s ease-in-out infinite;
+}
+
+.brain-halo {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: brain-halo 5s ease-in-out infinite;
+}
+
+.brain-signal {
+  stroke-dasharray: 3 97;
+  animation: brain-flow 3s linear infinite;
+}
+
+.brain-float {
+  animation: brain-drift 9s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .receipt-trace {
     animation: none;
+  }
+  .brain-node,
+  .brain-halo,
+  .brain-signal,
+  .brain-float {
+    animation: none;
+  }
+  .brain-signal {
+    stroke-dasharray: none;
   }
   * {
     transition-duration: 0.01ms !important;
