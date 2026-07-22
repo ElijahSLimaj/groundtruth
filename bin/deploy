@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! command -v railway >/dev/null 2>&1; then
+  echo "railway CLI not found. Install with: brew install railway" >&2
+  exit 1
+fi
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT"
+
+SERVICES=(serving web embedding ingestion)
+
+if [[ $# -gt 0 ]]; then
+  SERVICES=("$@")
+fi
+
+for svc in "${SERVICES[@]}"; do
+  echo ">> deploying $svc"
+  railway up --service "$svc" --ci
+done
+
+echo "done. run 'supabase db push' first if a migration changed."

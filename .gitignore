@@ -9,3 +9,7 @@ coverage/
 .DS_Store
 supabase/.temp/
 supabase/.branches/
+
+# compiled go service binaries
+services/ingestion/qa-stress
+services/embedding/embedding

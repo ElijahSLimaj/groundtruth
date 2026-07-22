@@ -8,7 +8,7 @@ async function bootstrap(): Promise<void> {
   const app = configureApp(
     await NestFactory.create(AppModule, { rawBody: true }),
   );
-  await app.listen(config.port);
+  await app.listen(config.port, '::');
 }
 
 bootstrap().catch((error: unknown) => {
