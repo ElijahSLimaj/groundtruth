@@ -31,9 +31,8 @@ func run(logger *slog.Logger) error {
 	defer stop()
 
 	databaseURL := os.Getenv("DATABASE_URL")
-	payloadRoot := os.Getenv("PAYLOAD_ROOT")
-	if databaseURL == "" || payloadRoot == "" {
-		return fmt.Errorf("DATABASE_URL and PAYLOAD_ROOT are required")
+	if databaseURL == "" {
+		return fmt.Errorf("DATABASE_URL is required")
 	}
 	interval := 30 * time.Second
 	if raw := os.Getenv("EMBED_INTERVAL"); raw != "" {
@@ -82,10 +81,22 @@ func run(logger *slog.Logger) error {
 	}
 	defer pool.Close()
 
+	payloads, err := payload.Build(ctx, payload.Options{
+		Root:         os.Getenv("PAYLOAD_ROOT"),
+		MasterKeyHex: os.Getenv("MASTER_KEY"),
+		S3Bucket:     os.Getenv("S3_BUCKET"),
+		S3Endpoint:   os.Getenv("S3_ENDPOINT"),
+		S3Region:     os.Getenv("S3_REGION"),
+		Pool:         pool,
+	})
+	if err != nil {
+		return err
+	}
+
 	p := &pipeline.Pipeline{
 		Pool:     pool,
 		Provider: embedProvider,
-		Payloads: &payload.FSReader{Root: payloadRoot},
+		Payloads: payloads,
 	}
 	logger.Info("embedding started",
 		"interval", interval.String(),
