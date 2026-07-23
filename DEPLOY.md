@@ -58,11 +58,20 @@ supabase db push
 
 Same project as the database. Supabase Storage is S3-compatible, so the existing worker code uses it with no change.
 
-1. Storage: create a bucket, for example `company-brain-payloads`. Keep it private.
-2. Project settings, Storage, S3 access keys: create one. Record the access key id and secret.
-3. The S3 endpoint is `https://<project-ref>.storage.supabase.co/storage/v1/s3`. The region is your project's region, for example `us-east-1`.
+1. Storage: create a private bucket `company-brain-payloads`.
+2. The S3 endpoint is `https://<project-ref>.supabase.co/storage/v1/s3` and the region is the project region, for example `eu-north-1`.
 
-ingestion and embedding read `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` from the environment (standard S3 credential chain), plus the `S3_*` variables below. The Go code turns on path-style addressing automatically whenever `S3_ENDPOINT` is set, which is what Supabase requires.
+For credentials there are two options. Dashboard S3 access keys work, but they can only be created by hand. The scripted alternative used here is **session-token auth**, which needs no dashboard step:
+
+```
+AWS_ACCESS_KEY_ID     = <project ref>
+AWS_SECRET_ACCESS_KEY = <legacy anon JWT>
+AWS_SESSION_TOKEN     = <legacy service_role JWT>
+```
+
+The Go AWS SDK reads all three from the environment via its default credential chain, so no code change is needed. The code turns on path-style addressing automatically whenever `S3_ENDPOINT` is set, which Supabase requires.
+
+Note: the Storage admin API rejects the new `sb_secret_...` keys ("Invalid Compact JWS"); use the legacy JWT keys for storage.
 
 ## 4. Railway
 
@@ -82,11 +91,11 @@ Config File: apps/web/railway.json
 Networking: generate a public domain
 SERVING_URL                    = https://<serving public domain>
 INTERNAL_API_SECRET            = <the shared secret>
-NEXT_PUBLIC_SUPABASE_URL       = https://<project-ref>.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = <supabase publishable key, sb_publishable_...>
+SUPABASE_URL       = https://<project-ref>.supabase.co
+SUPABASE_PUBLISHABLE_KEY = <supabase publishable key, sb_publishable_...>
 ```
 
-The two `NEXT_PUBLIC_*` values are **build-time** variables. Next.js bakes them into the browser bundle when the image is built, so setting them only as runtime variables leaves the login page broken. The web Dockerfile declares them as `ARG`, and Railway passes service variables as build args, so setting them as normal Railway variables on the web service is enough. If you build the image yourself, pass `--build-arg` for both.
+`SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` are read on the server at **runtime** and handed to the login form as props. They are deliberately not `NEXT_PUBLIC_*`: Next.js would inline those into the browser bundle at build time, which breaks in a container image built without them and locks one image to one environment. Keeping them runtime means the same image promotes across environments unchanged.
 
 Auth is Supabase email magic link. Sign-in works only for emails that exist as a `people` row (see step 6). Two settings in the Supabase dashboard, Authentication, URL Configuration:
 

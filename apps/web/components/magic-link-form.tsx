@@ -6,7 +6,13 @@ import { createSupabaseBrowserClient } from '../lib/supabase/client';
 
 type Status = 'idle' | 'sending' | 'sent' | 'error';
 
-export function MagicLinkForm() {
+export function MagicLinkForm({
+  supabaseUrl,
+  supabasePublishableKey,
+}: {
+  supabaseUrl: string;
+  supabasePublishableKey: string;
+}) {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -15,7 +21,10 @@ export function MagicLinkForm() {
     event.preventDefault();
     setStatus('sending');
     setError(null);
-    const supabase = createSupabaseBrowserClient();
+    const supabase = createSupabaseBrowserClient(
+      supabaseUrl,
+      supabasePublishableKey,
+    );
     const { error: otpError } = await supabase.auth.signInWithOtp({
       email,
       options: {

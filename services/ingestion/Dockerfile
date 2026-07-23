@@ -1,8 +1,8 @@
 FROM golang:1.25-alpine AS build
 WORKDIR /src
-COPY go.mod go.sum ./
+COPY services/ingestion/go.mod services/ingestion/go.sum ./
 RUN go mod download
-COPY . .
+COPY services/ingestion/ .
 RUN CGO_ENABLED=0 go build -o /out/ingestion ./cmd/ingestion
 
 FROM gcr.io/distroless/static-debian12:nonroot

@@ -3,6 +3,10 @@ import { redirect } from 'next/navigation';
 import { BrandMark } from '../../components/brand-mark';
 import { MagicLinkForm } from '../../components/magic-link-form';
 import { getViewer } from '../../lib/session';
+import {
+  supabasePublishableKey,
+  supabaseUrl,
+} from '../../lib/supabase/config';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,7 +52,10 @@ export default async function LoginPage({
           </p>
         ) : null}
 
-        <MagicLinkForm />
+        <MagicLinkForm
+          supabaseUrl={supabaseUrl()}
+          supabasePublishableKey={supabasePublishableKey()}
+        />
       </div>
     </div>
   );

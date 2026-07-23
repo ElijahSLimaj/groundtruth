@@ -1,8 +1,8 @@
 FROM golang:1.25-alpine AS build
 WORKDIR /src
-COPY go.mod go.sum ./
+COPY services/embedding/go.mod services/embedding/go.sum ./
 RUN go mod download
-COPY . .
+COPY services/embedding/ .
 RUN CGO_ENABLED=0 go build -o /out/embedding ./cmd/embedding
 
 FROM gcr.io/distroless/static-debian12:nonroot
