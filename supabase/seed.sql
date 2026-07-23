@@ -9,7 +9,7 @@ insert into people (id, tenant_id, email, display_name, role) values
   ('22222222-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111', 'sales@acme.test', 'Sam Sales', 'owner'),
   ('22222222-0000-0000-0000-000000000003', '11111111-1111-1111-1111-111111111111', 'eng@acme.test', 'Eve Engineer', 'member'),
   ('22222222-0000-0000-0000-000000000004', '11111111-1111-1111-1111-111111111111', 'support-agent@acme.test', 'Support Agent', 'agent'),
-  ('22222222-0000-0000-0000-000000000005', '11111111-1111-1111-1111-111111111111', 'elijah@attempttechnologies.io', 'Elijah Limaj', 'admin')
+  ('22222222-0000-0000-0000-000000000005', '11111111-1111-1111-1111-111111111111', 'elijah@buildstackhq.com', 'Elijah Limaj', 'admin')
 on conflict (id) do nothing;
 
 insert into connectors (id, tenant_id, source_type, status, config) values
