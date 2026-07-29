@@ -34,7 +34,7 @@ export default async function LoginPage({
       <div className="rounded-card border border-line bg-surface px-8 py-10">
         <span className="flex items-center gap-2.5">
           <BrandMark size={30} />
-          <span className="eyebrow text-ink-muted">Company Brain</span>
+          <span className="eyebrow text-ink-muted">Groundtruth</span>
         </span>
         <h1 className="mt-4 font-display font-extrabold text-2xl text-ink">
           Sign in

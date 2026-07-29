@@ -25,7 +25,7 @@ export default async function AppLayout({
         <Link href="/drift" className="flex items-center gap-2.5 px-2">
           <BrandMark size={28} />
           <span className="font-display font-extrabold text-md tracking-tight">
-            COMPANY BRAIN
+            GROUNDTRUTH
           </span>
         </Link>
         <ul className="flex flex-col gap-1">

@@ -119,7 +119,7 @@ export default async function ChatPage({
   if (!chatConfigured()) {
     return (
       <div className="max-w-3xl">
-        <PageHeader title="Chat" subtitle="Talk to your company brain." />
+        <PageHeader title="Chat" subtitle="Talk to Groundtruth." />
         <EmptyState
           title="Chat is not configured"
           detail="Set SERVING_URL and INTERNAL_API_SECRET so the web app can reach the chat engine, and ANTHROPIC_API_KEY on the serving service to enable the model."
@@ -172,7 +172,7 @@ export default async function ChatPage({
         <div className="flex-1">
           {!conversation ? (
             <EmptyState
-              title="Ask your company brain"
+              title="Ask Groundtruth"
               detail="Every answer is grounded in the canon and carries its receipt. Ask about pricing, policy, or process, or ask for a document or deck drafted from approved truth."
             />
           ) : (

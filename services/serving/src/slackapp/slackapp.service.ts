@@ -160,7 +160,7 @@ export class SlackAppService {
       },
     );
     if (!reviewer) {
-      return 'Your Slack account is not linked to a Company Brain person. Ask an admin to set your slack_user_id.';
+      return 'Your Slack account is not linked to a Groundtruth person. Ask an admin to set your slack_user_id.';
     }
 
     if (input.actionId === 'approve_proposal') {

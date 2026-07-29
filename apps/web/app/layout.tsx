@@ -21,7 +21,7 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Company Brain',
+  title: 'Groundtruth',
   description: 'Governed company knowledge with receipts',
 };
 

@@ -201,7 +201,7 @@ export default function LandingPage() {
           <span className="flex items-center gap-2.5">
             <BrandMark size={28} />
             <span className="font-display text-md font-extrabold tracking-tight">
-              COMPANY BRAIN
+              GROUNDTRUTH
             </span>
           </span>
           <nav aria-label="Landing" className="flex items-center gap-6">
@@ -236,7 +236,7 @@ export default function LandingPage() {
                 Your AI agents are confidently wrong about your company.
               </h1>
               <p className="mt-5 max-w-md text-md text-ink-secondary">
-                Company Brain is the knowledge layer where every answer carries
+                Groundtruth is the knowledge layer where every answer carries
                 a receipt: source, owner, and freshness. The same governed canon
                 for your team and your agents, with the same permissions.
               </p>
@@ -334,7 +334,7 @@ export default function LandingPage() {
                     Enterprise search
                   </th>
                   <th scope="col" className="py-3 font-medium text-verified">
-                    Company Brain
+                    Groundtruth
                   </th>
                 </tr>
               </thead>
@@ -437,7 +437,7 @@ export default function LandingPage() {
           aria-label="Closing"
           className="border-t border-line py-20 text-center"
         >
-          <p className="eyebrow text-ink-muted">Company Brain</p>
+          <p className="eyebrow text-ink-muted">Groundtruth</p>
           <h2 className="mx-auto mt-4 max-w-xl font-display text-xl font-extrabold tracking-tight text-ink">
             Small and true beats big and comprehensive.
           </h2>

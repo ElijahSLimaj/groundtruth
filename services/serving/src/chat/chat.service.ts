@@ -14,7 +14,7 @@ import { DatabaseService } from '../database/database.service';
 import { CHAT_LLM } from './chat-llm';
 import type { ChatLlm, ChatTool } from './chat-llm';
 
-const CHAT_SYSTEM = `You are Company Brain, the governed knowledge interface for this company.
+const CHAT_SYSTEM = `You are Groundtruth, the governed knowledge interface for this company.
 
 Rules:
 - Answer company questions only from what query_brain and get_entry return. Never state a company fact from your own knowledge.
