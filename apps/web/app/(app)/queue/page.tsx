@@ -132,7 +132,8 @@ export default async function QueuePage() {
 
             <aside className="border-l border-stream/40 bg-void/40 px-4 py-6">
               <p className="eyebrow text-stream mb-3">source excerpts</p>
-              {current.evidence.length === 0 ? (
+              {current.evidence.length === 0 &&
+              current.withheldEvidence.count === 0 ? (
                 <p className="text-xs text-ink-muted">
                   No stream evidence attached.
                 </p>
@@ -153,6 +154,16 @@ export default async function QueuePage() {
                   ))}
                 </ul>
               )}
+              {current.withheldEvidence.count > 0 ? (
+                <p className="mt-3 border-t border-line pt-3 font-mono text-xs text-ink-muted">
+                  {current.withheldEvidence.count}{' '}
+                  {current.withheldEvidence.count === 1 ? 'source' : 'sources'}{' '}
+                  outside your visibility
+                  {current.withheldEvidence.sourceTypes.length > 0
+                    ? ` · ${current.withheldEvidence.sourceTypes.join(', ')}`
+                    : ''}
+                </p>
+              ) : null}
             </aside>
           </div>
         </article>

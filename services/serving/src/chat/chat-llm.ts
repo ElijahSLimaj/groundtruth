@@ -16,6 +16,11 @@ export interface ChatTurnRequest {
   tools: ChatTool[];
 }
 
+export interface ChatUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
 export interface ChatTurnResult {
   text: string;
   toolCalls: {
@@ -23,6 +28,7 @@ export interface ChatTurnResult {
     input: Record<string, unknown>;
     result: unknown;
   }[];
+  usage: ChatUsage;
 }
 
 export interface ChatLlm {
@@ -46,6 +52,7 @@ export class AnthropicChatLlm implements ChatLlm {
 
   async runTurn(request: ChatTurnRequest): Promise<ChatTurnResult> {
     const toolCalls: ChatTurnResult['toolCalls'] = [];
+    const usage: ChatUsage = { inputTokens: 0, outputTokens: 0 };
     const toolsByName = new Map(request.tools.map((t) => [t.name, t]));
     const messages: Anthropic.MessageParam[] = request.messages.map((m) => ({
       role: m.role,
@@ -65,6 +72,8 @@ export class AnthropicChatLlm implements ChatLlm {
         messages,
         tools,
       });
+      usage.inputTokens += response.usage.input_tokens;
+      usage.outputTokens += response.usage.output_tokens;
 
       const toolUses = response.content.filter(
         (block): block is Anthropic.ToolUseBlock => block.type === 'tool_use',
@@ -76,7 +85,7 @@ export class AnthropicChatLlm implements ChatLlm {
           )
           .map((block) => block.text)
           .join('');
-        return { text, toolCalls };
+        return { text, toolCalls, usage };
       }
 
       messages.push({ role: 'assistant', content: response.content });
@@ -113,7 +122,7 @@ export class AnthropicChatLlm implements ChatLlm {
       }
       messages.push({ role: 'user', content: results });
     }
-    return { text: '', toolCalls };
+    return { text: '', toolCalls, usage };
   }
 }
 

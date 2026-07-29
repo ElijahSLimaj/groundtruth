@@ -21,6 +21,7 @@ export interface QueueProposal {
   routedTo: string;
   createdAt: Date;
   evidence: { content: string; occurredAt: Date | null }[];
+  withheldEvidence: { count: number; sourceTypes: string[] };
 }
 
 export async function loadQueue(viewer: Viewer): Promise<{
@@ -69,6 +70,7 @@ export async function loadQueue(viewer: Viewer): Promise<{
     const pendingRows = rows.rows.filter((r) => r.status === 'pending');
     const queuedCount = rows.rows.length - pendingRows.length;
 
+    const principals = [`person:${viewer.personId}`];
     const proposals: QueueProposal[] = [];
     for (const row of pendingRows) {
       const evidence = await client.query<{
@@ -79,9 +81,22 @@ export async function loadQueue(viewer: Viewer): Promise<{
          from drift_evidence de
          join event_chunks c on c.id = de.chunk_id
          where de.proposal_id = $1
+           and public.acl_admits(c.acl, $2)
          order by de.added_at
          limit 5`,
-        [row.id],
+        [row.id, principals],
+      );
+      const withheld = await client.query<{
+        count: string;
+        source_types: string[];
+      }>(
+        `select count(*)::text as count,
+                coalesce(array_agg(distinct c.source_type), '{}') as source_types
+         from drift_evidence de
+         join event_chunks c on c.id = de.chunk_id
+         where de.proposal_id = $1
+           and not public.acl_admits(c.acl, $2)`,
+        [row.id, principals],
       );
       proposals.push({
         id: row.id,
@@ -106,6 +121,10 @@ export async function loadQueue(viewer: Viewer): Promise<{
           content: e.content,
           occurredAt: e.occurred_at,
         })),
+        withheldEvidence: {
+          count: Number(withheld.rows[0]?.count ?? 0),
+          sourceTypes: withheld.rows[0]?.source_types ?? [],
+        },
       });
     }
     return { pending: proposals, queuedCount };

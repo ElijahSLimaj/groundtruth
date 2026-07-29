@@ -7,6 +7,8 @@ import { DatabaseService } from '../database/database.service';
 import { LLM_CLIENT } from './llm';
 import type { LlmClient } from './llm';
 import {
+  chunkIdsBySourceId,
+  EvidenceBlock,
   GAP_TIER2_PROMPT_VERSION,
   GAP_TIER2_SYSTEM,
   GAP_TIER3_PROMPT_VERSION,
@@ -15,6 +17,7 @@ import {
   gapTier3UserPrompt,
 } from './prompts';
 import {
+  attributeExcerpts,
   decodeGapTier3,
   GapTier2Result,
   GapTier3Wire,
@@ -171,13 +174,19 @@ export class GapService {
       return;
     }
 
+    const blocks: EvidenceBlock[] = chunks.map((chunk, index) => ({
+      id: `e${index + 1}`,
+      chunkId: chunk.chunkId,
+      content: chunk.content,
+    }));
+
     const wire = await this.llm.completeJson(
       {
         model: this.config.driftTier3Model,
         system: GAP_TIER3_SYSTEM,
         user: gapTier3UserPrompt({
           domain: tier2.domain,
-          contents: chunks.map((c) => c.content),
+          evidence: blocks,
         }),
         maxTokens: 2048,
         promptVersion: GAP_TIER3_PROMPT_VERSION,
@@ -256,7 +265,13 @@ export class GapService {
             cluster_size: chunks.length,
             confidence: draft.confidence,
             description: draft.gapDescription,
-            excerpts: draft.supportingExcerpts,
+            excerpts: attributeExcerpts(
+              draft.supportingExcerpts,
+              chunkIdsBySourceId(blocks),
+            ).map((excerpt) => ({
+              chunk_id: excerpt.chunkId,
+              text: excerpt.text,
+            })),
             prompt_versions: [
               GAP_TIER2_PROMPT_VERSION,
               GAP_TIER3_PROMPT_VERSION,

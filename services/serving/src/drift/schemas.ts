@@ -7,11 +7,32 @@ export const Tier2Result = z.object({
 });
 export type Tier2Result = z.infer<typeof Tier2Result>;
 
+export const SourcedExcerpt = z.object({
+  source_id: z.string().min(1),
+  text: z.string().min(1),
+});
+export type SourcedExcerpt = z.infer<typeof SourcedExcerpt>;
+
+export interface AttributedExcerpt {
+  chunkId: string;
+  text: string;
+}
+
+export function attributeExcerpts(
+  excerpts: SourcedExcerpt[],
+  chunkIdBySourceId: Map<string, string>,
+): AttributedExcerpt[] {
+  return excerpts.flatMap((excerpt) => {
+    const chunkId = chunkIdBySourceId.get(excerpt.source_id);
+    return chunkId ? [{ chunkId, text: excerpt.text }] : [];
+  });
+}
+
 export const Tier3Wire = z.object({
   drafted_statement: z.string().min(1),
   drafted_attributes_json: z.string(),
   contradiction_description: z.string().min(1),
-  supporting_excerpts: z.array(z.string()).max(5),
+  supporting_excerpts: z.array(SourcedExcerpt).max(5),
   confidence: z.number().min(0).max(1),
 });
 export type Tier3Wire = z.infer<typeof Tier3Wire>;
@@ -20,7 +41,7 @@ export interface Tier3Result {
   draftedStatement: string;
   draftedAttributes: Record<string, unknown>;
   contradictionDescription: string;
-  supportingExcerpts: string[];
+  supportingExcerpts: SourcedExcerpt[];
   confidence: number;
 }
 
@@ -58,7 +79,7 @@ export const GapTier3Wire = z.object({
   drafted_statement: z.string().min(1),
   drafted_attributes_json: z.string(),
   gap_description: z.string().min(1),
-  supporting_excerpts: z.array(z.string()).max(5),
+  supporting_excerpts: z.array(SourcedExcerpt).max(5),
   confidence: z.number().min(0).max(1),
 });
 export type GapTier3Wire = z.infer<typeof GapTier3Wire>;
@@ -67,7 +88,7 @@ export interface GapTier3Result {
   draftedStatement: string;
   draftedAttributes: Record<string, unknown>;
   gapDescription: string;
-  supportingExcerpts: string[];
+  supportingExcerpts: SourcedExcerpt[];
   confidence: number;
 }
 

@@ -18,10 +18,9 @@ export default async function AuditPage(props: {
       subject_id: string | null;
       occurred_at: Date;
       actor_name: string | null;
-      detail: Record<string, unknown>;
     }>(
       `select al.id, al.action, al.subject_type, al.subject_id, al.occurred_at,
-              p.display_name as actor_name, al.detail
+              p.display_name as actor_name
        from audit_log al
        left join people p on p.id = al.actor_id
        where ($1::text is null or al.action like $1 || '%')

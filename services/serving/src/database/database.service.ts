@@ -47,4 +47,32 @@ export class DatabaseService implements OnModuleDestroy {
       client.release();
     }
   }
+
+  async withAdvisoryLock(
+    name: string,
+    fn: () => Promise<void>,
+  ): Promise<boolean> {
+    const client = await this.pool.connect();
+    let held = false;
+    try {
+      await client.query('set role brain_app');
+      const acquired = await client.query<{ locked: boolean }>(
+        'select pg_try_advisory_lock(hashtextextended($1, 0)) as locked',
+        [name],
+      );
+      if (!acquired.rows[0].locked) {
+        return false;
+      }
+      held = true;
+      await fn();
+      return true;
+    } finally {
+      if (held) {
+        await client
+          .query('select pg_advisory_unlock(hashtextextended($1, 0))', [name])
+          .catch(() => undefined);
+      }
+      client.release();
+    }
+  }
 }

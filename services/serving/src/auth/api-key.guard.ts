@@ -11,7 +11,6 @@ import { Response } from 'express';
 
 import { DatabaseService } from '../database/database.service';
 import { AuthenticatedRequest } from './principal';
-import { RateLimiterService } from './rate-limiter.service';
 
 interface KeyRow {
   key_id: string;
@@ -25,10 +24,7 @@ interface KeyRow {
 
 @Injectable()
 export class ApiKeyGuard implements CanActivate {
-  constructor(
-    private readonly db: DatabaseService,
-    private readonly limiter: RateLimiterService,
-  ) {}
+  constructor(private readonly db: DatabaseService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
@@ -48,15 +44,28 @@ export class ApiKeyGuard implements CanActivate {
       throw new UnauthorizedException('unknown or revoked api key');
     }
 
-    const verdict = this.limiter.take(row.key_id, row.rate_tier);
+    const tool = (request.url ?? 'unknown').split('?')[0];
+    const verdict = await this.db.withTenant(row.tenant_id, async (client) => {
+      const result = await client.query<{
+        allowed: boolean;
+        retry_after: number;
+      }>('select * from public.meter_and_take($1, $2, $3, $4)', [
+        row.key_id,
+        row.rate_tier,
+        tool,
+        row.person_id,
+      ]);
+      return result.rows[0];
+    });
+
     if (!verdict.allowed) {
       const response = context.switchToHttp().getResponse<Response>();
-      response.setHeader('Retry-After', String(verdict.retryAfterSeconds));
+      response.setHeader('Retry-After', String(verdict.retry_after));
       throw new HttpException(
         {
           statusCode: 429,
           message: 'rate limited',
-          retryAfter: verdict.retryAfterSeconds,
+          retryAfter: verdict.retry_after,
         },
         429,
       );
@@ -72,15 +81,6 @@ export class ApiKeyGuard implements CanActivate {
       rateTier: row.rate_tier,
       principals: [`person:${row.person_id}`],
     };
-
-    const tool = (request.url ?? 'unknown').split('?')[0];
-    await this.db.withTenant(row.tenant_id, (client) =>
-      client.query(
-        `insert into metering_events (tenant_id, api_key_id, person_id, tool)
-         values ($1, $2, $3, $4)`,
-        [row.tenant_id, row.key_id, row.person_id, tool],
-      ),
-    );
     return true;
   }
 }

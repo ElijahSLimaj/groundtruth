@@ -53,7 +53,9 @@ const gapDraft = (statement: string): GapTier3Wire => ({
   drafted_statement: statement,
   drafted_attributes_json: '{"window_days": 30}',
   gap_description: 'refund policy keeps recurring with no coverage',
-  supporting_excerpts: ['we honor refunds for 30 days'],
+  supporting_excerpts: [
+    { source_id: 'e1', text: 'we honor refunds for 30 days' },
+  ],
   confidence: 0.8,
 });
 

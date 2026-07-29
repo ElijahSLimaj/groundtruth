@@ -16,6 +16,7 @@ export interface ServingConfig {
   decayIntervalMs: number;
   mergeIntervalMs: number;
   mergeSimilarityThreshold: number;
+  sweepConcurrency: number;
   payloadRoot: string | null;
   s3Bucket: string | null;
   s3Endpoint: string | null;
@@ -54,6 +55,7 @@ export function loadConfig(
     decayIntervalMs: Number(env.DECAY_INTERVAL_MS ?? 86_400_000),
     mergeIntervalMs: Number(env.MERGE_INTERVAL_MS ?? 604_800_000),
     mergeSimilarityThreshold: Number(env.MERGE_SIMILARITY_THRESHOLD ?? 0.9),
+    sweepConcurrency: Math.max(1, Number(env.SWEEP_CONCURRENCY ?? 4)),
     payloadRoot: env.PAYLOAD_ROOT ?? null,
     s3Bucket: env.S3_BUCKET ?? null,
     s3Endpoint: env.S3_ENDPOINT ?? null,

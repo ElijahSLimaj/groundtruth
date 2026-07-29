@@ -46,6 +46,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     this.timers.push(
       setInterval(() => {
         void this.decaySweep();
+        void this.extendPartitions();
       }, this.config.decayIntervalMs),
     );
     this.timers.push(
@@ -84,87 +85,121 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     }
     this.running = true;
     try {
-      for (const tenantId of await this.tenants()) {
-        try {
-          const drift = await this.drift.runOnce(tenantId);
-          const gaps = await this.gap.runOnce(tenantId);
-          const coldStart = await this.coldStart.runOnce(tenantId);
-          const org = await this.coldStart.inferOrg(tenantId);
-          const notified = await this.slackApp.notifyPending(tenantId);
-          this.logger.log(
-            JSON.stringify({
-              event: 'sweep',
-              tenant: tenantId,
-              drift,
-              gaps,
-              cold_start: coldStart,
-              org_inference: org,
-              slack_notified: notified,
-            }),
-          );
-        } catch (error) {
-          this.logger.error(
-            JSON.stringify({
-              event: 'sweep_failed',
-              tenant: tenantId,
-              error: String(error),
-            }),
-          );
-        }
-      }
+      await this.singleFlight('brain:sweep:drift', (tenantId) =>
+        this.sweepTenant(tenantId),
+      );
     } finally {
       this.running = false;
     }
   }
 
   async mergeSweep(): Promise<void> {
-    for (const tenantId of await this.tenants()) {
-      try {
-        const proposed = await this.merge.runOnce(tenantId);
-        const tuning = await this.tuning.recalculate(tenantId);
-        this.logger.log(
-          JSON.stringify({
-            event: 'weekly_sweep',
-            tenant: tenantId,
-            merges_proposed: proposed,
-            tuning,
-          }),
-        );
-      } catch (error) {
-        this.logger.error(
-          JSON.stringify({
-            event: 'weekly_sweep_failed',
-            tenant: tenantId,
-            error: String(error),
-          }),
-        );
-      }
-    }
+    await this.singleFlight('brain:sweep:merge', async (tenantId) => {
+      const proposed = await this.merge.runOnce(tenantId);
+      const tuning = await this.tuning.recalculate(tenantId);
+      this.logger.log(
+        JSON.stringify({
+          event: 'weekly_sweep',
+          tenant: tenantId,
+          merges_proposed: proposed,
+          tuning,
+        }),
+      );
+    });
   }
 
   async decaySweep(): Promise<void> {
-    for (const tenantId of await this.tenants()) {
+    await this.singleFlight('brain:sweep:decay', async (tenantId) => {
+      const decayed = await this.db.withTenant(tenantId, async (client) => {
+        const result = await client.query<{ canon_decay_sweep: number }>(
+          `select public.canon_decay_sweep()`,
+        );
+        return result.rows[0].canon_decay_sweep;
+      });
+      if (decayed > 0) {
+        this.logger.log(
+          JSON.stringify({ event: 'decay_sweep', tenant: tenantId, decayed }),
+        );
+      }
+    });
+  }
+
+  async extendPartitions(): Promise<void> {
+    await this.db.withAdvisoryLock('brain:partitions:extend', async () => {
       try {
-        const decayed = await this.db.withTenant(tenantId, async (client) => {
-          const result = await client.query<{ canon_decay_sweep: number }>(
-            `select public.canon_decay_sweep()`,
-          );
-          return result.rows[0].canon_decay_sweep;
-        });
-        if (decayed > 0) {
-          this.logger.log(
-            JSON.stringify({ event: 'decay_sweep', tenant: tenantId, decayed }),
-          );
-        }
+        await this.db.asApp((client) =>
+          client.query('select public.extend_partitions(3)'),
+        );
       } catch (error) {
         this.logger.error(
           JSON.stringify({
-            event: 'decay_sweep_failed',
-            tenant: tenantId,
+            event: 'partition_extension_failed',
             error: String(error),
           }),
         );
       }
+    });
+  }
+
+  private async sweepTenant(tenantId: string): Promise<void> {
+    const drift = await this.drift.runOnce(tenantId);
+    const gaps = await this.gap.runOnce(tenantId);
+    const coldStart = await this.coldStart.runOnce(tenantId);
+    const org = await this.coldStart.inferOrg(tenantId);
+    const notified = await this.slackApp.notifyPending(tenantId);
+    this.logger.log(
+      JSON.stringify({
+        event: 'sweep',
+        tenant: tenantId,
+        drift,
+        gaps,
+        cold_start: coldStart,
+        org_inference: org,
+        slack_notified: notified,
+      }),
+    );
+  }
+
+  private async singleFlight(
+    lockName: string,
+    perTenant: (tenantId: string) => Promise<void>,
+  ): Promise<void> {
+    const ran = await this.db.withAdvisoryLock(lockName, async () => {
+      const tenants = await this.tenants();
+      await this.forEachTenant(tenants, lockName, perTenant);
+    });
+    if (!ran) {
+      this.logger.log(
+        JSON.stringify({ event: 'sweep_skipped_locked', lock: lockName }),
+      );
     }
+  }
+
+  private async forEachTenant(
+    tenants: string[],
+    lockName: string,
+    perTenant: (tenantId: string) => Promise<void>,
+  ): Promise<void> {
+    const queue = [...tenants];
+    const workers = Array.from(
+      { length: Math.min(this.config.sweepConcurrency, queue.length) },
+      async () => {
+        for (let next = queue.shift(); next; next = queue.shift()) {
+          try {
+            await perTenant(next);
+          } catch (error) {
+            this.logger.error(
+              JSON.stringify({
+                event: 'sweep_failed',
+                lock: lockName,
+                tenant: next,
+                error: String(error),
+              }),
+            );
+          }
+        }
+      },
+    );
+    await Promise.all(workers);
   }
 }

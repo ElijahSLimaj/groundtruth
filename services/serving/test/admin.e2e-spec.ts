@@ -130,6 +130,37 @@ suite('admin key management and metering (e2e)', () => {
     expect(tools).toContain('/admin/keys');
   });
 
+  it('rate limits from the shared bucket and never meters a refused call', async () => {
+    const created = await request(httpServer)
+      .post('/admin/keys')
+      .set(auth(adminKey))
+      .send({ person_id: agentId, name: 'minimal tier', rate_tier: 'minimal' })
+      .expect(201);
+    const key = created.body.key as string;
+
+    await request(httpServer)
+      .get('/tools/conflicts')
+      .set(auth(key))
+      .expect(200);
+    await request(httpServer)
+      .get('/tools/conflicts')
+      .set(auth(key))
+      .expect(200);
+
+    const refused = await request(httpServer)
+      .get('/tools/conflicts')
+      .set(auth(key))
+      .expect(429);
+    expect(Number(refused.headers['retry-after'])).toBeGreaterThan(0);
+
+    const metered = await admin.query<{ n: string }>(
+      `select count(*) as n from metering_events
+       where tenant_id = $1 and api_key_id = $2`,
+      [tenantId, created.body.id],
+    );
+    expect(Number(metered.rows[0].n)).toBe(2);
+  });
+
   it('enumerates tenants for the scheduler without tenant context', async () => {
     const scheduler = app.get(SchedulerService);
     const tenants = await scheduler.tenants();

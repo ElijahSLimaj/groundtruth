@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 
 import { BrandMark } from '../../components/brand-mark';
-import { MagicLinkForm } from '../../components/magic-link-form';
+import { SignInForm } from '../../components/sign-in-form';
 import { getViewer } from '../../lib/session';
 import {
   supabasePublishableKey,
@@ -40,7 +40,8 @@ export default async function LoginPage({
           Sign in
         </h1>
         <p className="mt-2 text-sm text-ink-muted">
-          Enter your work email and we will send you a secure sign-in link.
+          Enter your work email to continue with single sign-on or a secure
+          email link.
         </p>
 
         {message ? (
@@ -52,7 +53,7 @@ export default async function LoginPage({
           </p>
         ) : null}
 
-        <MagicLinkForm
+        <SignInForm
           supabaseUrl={supabaseUrl()}
           supabasePublishableKey={supabasePublishableKey()}
         />

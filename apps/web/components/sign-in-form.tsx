@@ -4,9 +4,17 @@ import { useState } from 'react';
 
 import { createSupabaseBrowserClient } from '../lib/supabase/client';
 
-type Status = 'idle' | 'sending' | 'sent' | 'error';
+type Status = 'idle' | 'submitting' | 'redirecting' | 'sent' | 'error';
 
-export function MagicLinkForm({
+function domainOf(email: string): string | null {
+  const at = email.lastIndexOf('@');
+  if (at < 0 || at === email.length - 1) {
+    return null;
+  }
+  return email.slice(at + 1).toLowerCase();
+}
+
+export function SignInForm({
   supabaseUrl,
   supabasePublishableKey,
 }: {
@@ -19,17 +27,30 @@ export function MagicLinkForm({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setStatus('sending');
+    setStatus('submitting');
     setError(null);
     const supabase = createSupabaseBrowserClient(
       supabaseUrl,
       supabasePublishableKey,
     );
+    const redirectTo = `${window.location.origin}/api/auth/callback`;
+
+    const domain = domainOf(email);
+    if (domain) {
+      const { data, error: ssoError } = await supabase.auth.signInWithSSO({
+        domain,
+        options: { redirectTo },
+      });
+      if (!ssoError && data?.url) {
+        setStatus('redirecting');
+        window.location.href = data.url;
+        return;
+      }
+    }
+
     const { error: otpError } = await supabase.auth.signInWithOtp({
       email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/api/auth/callback`,
-      },
+      options: { emailRedirectTo: redirectTo },
     });
     if (otpError) {
       setStatus('error');
@@ -60,6 +81,8 @@ export function MagicLinkForm({
     );
   }
 
+  const busy = status === 'submitting' || status === 'redirecting';
+
   return (
     <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-3">
       <label htmlFor="email" className="text-sm text-ink-secondary">
@@ -83,11 +106,19 @@ export function MagicLinkForm({
       ) : null}
       <button
         type="submit"
-        disabled={status === 'sending'}
+        disabled={busy}
         className="rounded-control bg-action px-4 py-3 text-center text-sm font-medium text-void transition-opacity duration-150 hover:opacity-90 disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action"
       >
-        {status === 'sending' ? 'Sending…' : 'Send magic link'}
+        {status === 'redirecting'
+          ? 'Redirecting to your provider…'
+          : status === 'submitting'
+            ? 'Continuing…'
+            : 'Continue'}
       </button>
+      <p className="text-xs text-ink-muted">
+        Single sign-on if your company has it configured, a secure email link
+        otherwise.
+      </p>
     </form>
   );
 }

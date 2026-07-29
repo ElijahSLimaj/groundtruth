@@ -23,6 +23,12 @@ Rules:
 - When asked for a document or presentation, first retrieve the relevant canon with query_brain, then build it with create_document or create_deck, citing the entry ids each section relies on. Never include an uncited company fact in an artifact.
 - Plain verbs, sentence case, no filler.`;
 
+const BILLABLE_CHAT_TOOLS = new Set([
+  'propose_update',
+  'create_document',
+  'create_deck',
+]);
+
 export interface ConversationSummary {
   id: string;
   title: string;
@@ -160,12 +166,31 @@ export class ChatService {
       tools: this.buildTools(principal, id, citations, artifactIds),
     });
 
+    const billableTools = [...new Set(turn.toolCalls.map((c) => c.name))]
+      .filter((name) => BILLABLE_CHAT_TOOLS.has(name))
+      .sort();
+
     return this.db.withTenant(principal.tenantId, async (client) => {
       const message = await client.query<ChatMessageRow>(
         `insert into chat_messages (tenant_id, conversation_id, role, content, citations)
          values ($1, $2, 'assistant', $3, $4)
          returning id, role, content, citations, created_at`,
         [principal.tenantId, id, turn.text, JSON.stringify(citations)],
+      );
+      await client.query(
+        `insert into metering_events
+           (tenant_id, api_key_id, person_id, tool, category, model,
+            input_tokens, output_tokens, billable)
+         values ($1, null, $2, $3, 'agent_run', $4, $5, $6, $7)`,
+        [
+          principal.tenantId,
+          principal.personId,
+          billableTools.length > 0 ? billableTools.join('+') : 'chat.read',
+          this.config.chatModel,
+          turn.usage.inputTokens,
+          turn.usage.outputTokens,
+          billableTools.length > 0,
+        ],
       );
       await client.query(
         `update chat_artifacts set message_id = $2

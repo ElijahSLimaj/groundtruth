@@ -7,6 +7,8 @@ import type { ServingConfig } from '../config';
 import { LLM_CLIENT } from './llm';
 import type { LlmClient } from './llm';
 import {
+  chunkIdsBySourceId,
+  EvidenceBlock,
   TIER2_PROMPT_VERSION,
   TIER2_SYSTEM,
   TIER3_PROMPT_VERSION,
@@ -15,6 +17,8 @@ import {
   tier3UserPrompt,
 } from './prompts';
 import {
+  AttributedExcerpt,
+  attributeExcerpts,
   calibrateConfidence,
   decodeTier3,
   resolveTuning,
@@ -36,6 +40,18 @@ export interface DriftRunResult {
   evidenceAttached: number;
   suppressedByCooldown: number;
   queuedByBudget: number;
+}
+
+interface DraftOutcome {
+  draft: Tier3Result;
+  excerpts: AttributedExcerpt[];
+}
+
+interface CorroboratingChunk {
+  chunkId: string;
+  eventId: string;
+  content: string;
+  sourceType: string;
 }
 
 interface Tier1Candidate {
@@ -89,10 +105,13 @@ export class DriftService {
 
     const { tuning, candidates } = await this.db.withTenant(
       tenantId,
-      async (client) => ({
-        tuning: await this.loadTuning(client),
-        candidates: await this.scanCandidates(client),
-      }),
+      async (client) => {
+        const tuning = await this.loadTuning(client);
+        return {
+          tuning,
+          candidates: await this.scanCandidates(client, tuning.scan_limit),
+        };
+      },
     );
     result.chunksScanned = candidates.length;
     if (candidates.length === 0) {
@@ -134,7 +153,10 @@ export class DriftService {
     return resolveTuning(row.rows[0]?.params);
   }
 
-  private async scanCandidates(client: PoolClient): Promise<Tier1Candidate[]> {
+  private async scanCandidates(
+    client: PoolClient,
+    scanLimit: number,
+  ): Promise<Tier1Candidate[]> {
     interface ScanRow {
       chunk_id: string;
       anchor_event_id: string;
@@ -192,7 +214,7 @@ export class DriftService {
       ) cand on true
       order by nc.created_at, nc.id
       `,
-      [200],
+      [scanLimit],
     );
 
     return rows.rows.map((row) => ({
@@ -299,9 +321,9 @@ export class DriftService {
       return;
     }
 
-    const draft = await this.draft(tenantId, candidate, pre.corroborating);
+    const outcome = await this.draft(tenantId, candidate, pre.corroborating);
     result.tier3Drafted++;
-    if (!draft) {
+    if (!outcome) {
       result.invalidDrafts++;
       return;
     }
@@ -309,7 +331,7 @@ export class DriftService {
       tenantId,
       candidate,
       tier2,
-      draft,
+      outcome,
       pre.corroborating,
       pre.recurring,
       tuning,
@@ -326,7 +348,7 @@ export class DriftService {
   ): Promise<{
     handled: boolean;
     recurring: boolean;
-    corroborating: { chunkId: string; eventId: string; content: string }[];
+    corroborating: CorroboratingChunk[];
   }> {
     return this.db.withTenant(tenantId, async (client) => {
       const open = await client.query<{ id: string }>(
@@ -352,8 +374,9 @@ export class DriftService {
         id: string;
         event_id: string;
         content: string;
+        source_type: string;
       }>(
-        `select c.id, c.event_id, c.content from event_chunks c
+        `select c.id, c.event_id, c.content, c.source_type from event_chunks c
          where c.id <> $1 and not c.tombstoned and c.window_key <> $2
          order by c.embedding <=> (select embedding from event_chunks where id = $1 limit 1)
          limit 5`,
@@ -363,6 +386,7 @@ export class DriftService {
         chunkId: c.id,
         eventId: c.event_id,
         content: c.content,
+        sourceType: c.source_type,
       }));
 
       const rejected = await client.query<{ id: string }>(
@@ -393,8 +417,8 @@ export class DriftService {
   private async draft(
     tenantId: string,
     candidate: Tier1Candidate,
-    corroborating: { chunkId: string; eventId: string; content: string }[],
-  ): Promise<Tier3Result | null> {
+    corroborating: CorroboratingChunk[],
+  ): Promise<DraftOutcome | null> {
     const context = await this.db.withTenant(tenantId, async (client) => {
       const history = await client.query<{
         version_number: number;
@@ -404,14 +428,40 @@ export class DriftService {
          where cv.entry_id = $1 order by cv.version_number desc limit 3`,
         [candidate.entryId],
       );
-      const thread = await client.query<{ content: string }>(
-        `select c.content from event_chunks c
+      const thread = await client.query<{
+        id: string;
+        content: string;
+        source_type: string;
+      }>(
+        `select c.id, c.content, c.source_type from event_chunks c
          where c.window_key = $1 and c.id <> $2 and not c.tombstoned
          order by c.event_occurred_at limit 5`,
         [candidate.windowKey, candidate.chunkId],
       );
       return { history: history.rows, thread: thread.rows };
     });
+
+    const trigger: EvidenceBlock = {
+      id: 'e1',
+      chunkId: candidate.chunkId,
+      sourceType: candidate.sourceType,
+      content: candidate.content,
+    };
+    const threadContext: EvidenceBlock[] = context.thread.map((row, index) => ({
+      id: `e${index + 2}`,
+      chunkId: row.id,
+      sourceType: row.source_type,
+      content: row.content,
+    }));
+    const corroboratingBlocks: EvidenceBlock[] = corroborating.map(
+      (row, index) => ({
+        id: `e${index + 2 + threadContext.length}`,
+        chunkId: row.chunkId,
+        sourceType: row.sourceType,
+        content: row.content,
+      }),
+    );
+    const blocks = [trigger, ...threadContext, ...corroboratingBlocks];
 
     const wire = await this.llm.completeJson(
       {
@@ -424,9 +474,9 @@ export class DriftService {
             version: h.version_number,
             statement: h.statement,
           })),
-          triggerContent: candidate.content,
-          threadContext: context.thread.map((t) => t.content),
-          corroborating: corroborating.map((c) => c.content),
+          trigger,
+          threadContext,
+          corroborating: corroboratingBlocks,
         }),
         maxTokens: 2048,
         promptVersion: TIER3_PROMPT_VERSION,
@@ -444,19 +494,26 @@ export class DriftService {
       );
       return null;
     }
-    return decoded;
+    return {
+      draft: decoded,
+      excerpts: attributeExcerpts(
+        decoded.supportingExcerpts,
+        chunkIdsBySourceId(blocks),
+      ),
+    };
   }
 
   private async applyHygiene(
     tenantId: string,
     candidate: Tier1Candidate,
     tier2: Tier2Result,
-    draft: Tier3Result,
+    outcome: DraftOutcome,
     corroborating: { chunkId: string; eventId: string }[],
     recurring: boolean,
     tuning: TuningParams,
     result: DriftRunResult,
   ): Promise<void> {
+    const draft = outcome.draft;
     const evidence = [
       { chunkId: candidate.chunkId, eventId: candidate.anchorEventId },
       ...corroborating,
@@ -528,7 +585,10 @@ export class DriftService {
             confidence,
             raw_confidence: draft.confidence,
             description: draft.contradictionDescription,
-            excerpts: draft.supportingExcerpts,
+            excerpts: outcome.excerpts.map((excerpt) => ({
+              chunk_id: excerpt.chunkId,
+              text: excerpt.text,
+            })),
             prompt_versions: [TIER2_PROMPT_VERSION, TIER3_PROMPT_VERSION],
             strategic,
             recurring_after_rejection: recurring,

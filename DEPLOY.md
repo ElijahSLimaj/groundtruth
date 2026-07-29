@@ -52,7 +52,9 @@ supabase link --project-ref <ref>
 supabase db push
 ```
 
-`db push` applies the 21 forward-only migrations. They create the `vector` schema objects, RLS on every table, and the `brain_app`, `brain_worker`, `brain_embedder` roles granted to `postgres`. Run this before any service starts.
+`db push` applies the forward-only migrations in `supabase/migrations`. They create the `vector` schema objects, RLS on every table, and the `brain_app`, `brain_worker`, `brain_embedder` roles granted to `postgres`. Run this before any service starts.
+
+Partitions for `events`, `event_chunks`, and `audit_log` are created 24 months ahead by the migration, then extended three months ahead by a `pg_cron` job (`extend-partitions`, 03:00 on the first of each month). If `pg_cron` is unavailable the migration logs a notice and continues; the serving scheduler calls `extend_partitions(3)` on its daily timer as a fallback, so coverage does not depend on either mechanism alone. Verify after deploy with `select * from cron.job`.
 
 ## 3. Supabase Storage
 
@@ -97,7 +99,11 @@ SUPABASE_PUBLISHABLE_KEY = <supabase publishable key, sb_publishable_...>
 
 `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` are read on the server at **runtime** and handed to the login form as props. They are deliberately not `NEXT_PUBLIC_*`: Next.js would inline those into the browser bundle at build time, which breaks in a container image built without them and locks one image to one environment. Keeping them runtime means the same image promotes across environments unchanged.
 
-Auth is Supabase email magic link. Sign-in works only for emails that exist as a `people` row (see step 6). Two settings in the Supabase dashboard, Authentication, URL Configuration:
+Auth is single sign-on with an email magic-link fallback. The sign-in form tries SSO for the email's domain first; if the tenant has an identity provider configured it redirects there, otherwise it sends a magic link. Both paths return through the same `/api/auth/callback`, and sign-in works only for emails that already exist as a `people` row (see step 6), so the provisioning gate holds for SSO users too. SCIM auto-provisioning is not built; SSO users must still exist as a `people` row.
+
+To turn on SSO for a customer, register their SAML identity provider against their email domain with the Supabase Management API (`POST /v1/projects/{ref}/config/auth/sso/providers`, or `supabase sso add --project-ref <ref> --type saml --domains customer.com --metadata-url <idp>`). SAML SSO requires the Supabase Pro plan or higher. One provider per customer domain; the domain in the login form routes to it. No app redeploy is needed to add a tenant's provider.
+
+Two settings in the Supabase dashboard, Authentication, URL Configuration:
 
 - Site URL: `https://<web public domain>`
 - Redirect URLs: add `https://<web public domain>/api/auth/callback`
@@ -117,6 +123,8 @@ EMBEDDING_MODEL      = voyage-large-2
 VOYAGE_API_KEY       = <key>
 SCHEDULER_ENABLED    = 1
 ```
+
+`SCHEDULER_ENABLED=1` is safe on every replica. Each sweep takes a Postgres advisory lock (`brain:sweep:drift`, `brain:sweep:merge`, `brain:sweep:decay`, `brain:partitions:extend`), so exactly one instance runs a given sweep at a time and the others log `sweep_skipped_locked` and move on. `SWEEP_CONCURRENCY` (default 4) bounds how many tenants that instance processes in parallel.
 
 `CHAT_MODEL`, `DRIFT_TIER2_MODEL`, `DRIFT_TIER3_MODEL`, and the interval variables have sane defaults; override only if needed. Serving binds `::` so Railway's IPv6 proxy can reach it.
 

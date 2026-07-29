@@ -41,7 +41,7 @@ const tier3Draft = (statement: string): Tier3Wire => ({
   drafted_statement: statement,
   drafted_attributes_json: '{"amount": 1799}',
   contradiction_description: 'pricing changed in the sales channel',
-  supporting_excerpts: ['1799 from August'],
+  supporting_excerpts: [{ source_id: 'e1', text: '1799 from August' }],
   confidence: 0.85,
 });
 
@@ -65,23 +65,33 @@ suite('drift engine (e2e)', () => {
     position: number,
     content: string,
     sourceType = 'slack',
+    acl = '{"scope": "tenant"}',
   ) => {
     const eventId = randomUUID();
     const chunkId = randomUUID();
     await admin.query(
       `insert into events (id, tenant_id, connector_id, source_type, external_id,
                            author_source_ref, thread_key, occurred_at, acl, payload_ref)
-       values ($1::uuid, $2, $3, $4, $1, 'slack:U1', $1, now(), '{"scope": "tenant"}', 'payloads/x')`,
-      [eventId, tenantId, connectorId, sourceType],
+       values ($1::uuid, $2, $3, $4, $1, 'slack:U1', $1, now(), $5::jsonb, 'payloads/x')`,
+      [eventId, tenantId, connectorId, sourceType, acl],
     );
     await admin.query(
       `insert into event_chunks (id, tenant_id, event_id, event_occurred_at, chunk_index,
                                  content, embedding, embedding_model, acl, token_count,
                                  window_key, member_event_ids, source_type)
        select $1::uuid, $2, $3::uuid, e.occurred_at, 0, $4, $5::extensions.vector, $6,
-              '{"scope": "tenant"}', 8, $1, array[$3::uuid], $7
+              $8::jsonb, 8, $1, array[$3::uuid], $7
        from events e where e.id = $3::uuid`,
-      [chunkId, tenantId, eventId, content, vec(position), model, sourceType],
+      [
+        chunkId,
+        tenantId,
+        eventId,
+        content,
+        vec(position),
+        model,
+        sourceType,
+        acl,
+      ],
     );
     return { eventId, chunkId };
   };
@@ -258,6 +268,80 @@ suite('drift engine (e2e)', () => {
       [pricingEntryId],
     );
     expect(Number(proposals.rows[0].n)).toBe(1);
+  });
+
+  it('carries the fact from a chunk the owner cannot see while withholding its excerpt', async () => {
+    const insider = `person:${randomUUID()}`;
+    const { chunkId } = await insertChunk(
+      1,
+      'exec only: growth moves to 2099 next quarter',
+      'slack',
+      JSON.stringify({ scope: 'principals', principals: [insider] }),
+    );
+    fake.tier2Queue.push({
+      relation: 'contradicts',
+      confidence: 0.93,
+      conflicting_field: 'billing_period',
+    });
+    fake.tier3Queue.push(tier3Draft('Growth plan bills quarterly at 2099'));
+
+    const result = await drift.runOnce(tenantId);
+    expect(result.proposalsCreated).toBe(1);
+
+    const proposalId = (
+      await admin.query<{ id: string }>(
+        `select id from drift_proposals
+         where tenant_id = $1 and conflicting_field = 'billing_period'`,
+        [tenantId],
+      )
+    ).rows[0].id;
+
+    const attached = await admin.query(
+      `select 1 from drift_evidence where proposal_id = $1 and chunk_id = $2`,
+      [proposalId, chunkId],
+    );
+    expect(attached.rowCount).toBe(1);
+
+    const visibleToOwner = await admin.query<{ id: string }>(
+      `select c.id from drift_evidence de
+       join event_chunks c on c.id = de.chunk_id
+       where de.proposal_id = $1 and public.acl_admits(c.acl, $2)`,
+      [proposalId, [`person:${ownerId}`]],
+    );
+    expect(visibleToOwner.rows.map((r) => r.id)).not.toContain(chunkId);
+
+    const withheldFromOwner = await admin.query<{ id: string }>(
+      `select c.id from drift_evidence de
+       join event_chunks c on c.id = de.chunk_id
+       where de.proposal_id = $1 and not public.acl_admits(c.acl, $2)`,
+      [proposalId, [`person:${ownerId}`]],
+    );
+    expect(withheldFromOwner.rows.map((r) => r.id)).toContain(chunkId);
+
+    const visibleToInsider = await admin.query<{ id: string }>(
+      `select c.id from drift_evidence de
+       join event_chunks c on c.id = de.chunk_id
+       where de.proposal_id = $1 and public.acl_admits(c.acl, $2)`,
+      [proposalId, [insider]],
+    );
+    expect(visibleToInsider.rows.map((r) => r.id)).toContain(chunkId);
+  });
+
+  it('attributes every tier 3 excerpt to the chunk it was quoted from', async () => {
+    const audit = await admin.query<{
+      detail: { excerpts: { chunk_id: string; text: string }[] };
+    }>(
+      `select detail from audit_log
+       where tenant_id = $1 and action = 'drift.proposal.created'
+       order by occurred_at desc limit 1`,
+      [tenantId],
+    );
+    const excerpts = audit.rows[0].detail.excerpts;
+    expect(excerpts.length).toBeGreaterThanOrEqual(1);
+    for (const excerpt of excerpts) {
+      expect(excerpt.chunk_id).toMatch(/^[0-9a-f-]{36}$/);
+      expect(typeof excerpt.text).toBe('string');
+    }
   });
 
   it('bumps last_referenced_at on confirms without proposing', async () => {

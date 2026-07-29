@@ -42,7 +42,11 @@ class FakeChatLlm implements ChatLlm {
       this.seen.push(result);
       toolCalls.push({ name: step.name, input: step.input, result });
     }
-    return { text: scripted.text, toolCalls };
+    return {
+      text: scripted.text,
+      toolCalls,
+      usage: { inputTokens: 1200, outputTokens: 300 },
+    };
   }
 }
 
@@ -196,6 +200,89 @@ suite('chat engine (e2e)', () => {
       [artifact.id],
     );
     expect(linked.rows[0].message_id).toBe(response.body.message.id);
+  });
+
+  it('meters a read-only turn as non-billable cost telemetry', async () => {
+    fake.queue.push({
+      invoke: [{ name: 'query_brain', input: { question: 'what is pricing' } }],
+      text: 'Growth is 1499 per month.',
+    });
+
+    await request(http)
+      .post('/chat/messages')
+      .set(headers)
+      .send({ content: 'remind me of the growth price' })
+      .expect(201);
+
+    const row = await admin.query<{
+      category: string;
+      billable: boolean;
+      tool: string;
+      input_tokens: number;
+      output_tokens: number;
+    }>(
+      `select category, billable, tool, input_tokens, output_tokens
+       from metering_events
+       where tenant_id = $1 and person_id = $2
+       order by occurred_at desc limit 1`,
+      [tenantId, ownerId],
+    );
+    expect(row.rows[0]).toMatchObject({
+      category: 'agent_run',
+      billable: false,
+      tool: 'chat.read',
+    });
+    expect(row.rows[0].input_tokens).toBeGreaterThan(0);
+    expect(row.rows[0].output_tokens).toBeGreaterThan(0);
+  });
+
+  it('bills a turn that runs an action tool, attributed to the person', async () => {
+    fake.queue.push({
+      invoke: [
+        { name: 'query_brain', input: { question: 'pricing for the deck' } },
+        {
+          name: 'create_deck',
+          input: {
+            title: 'Deck',
+            slides: [{ title: 'P', bullets: ['x'], entry_ids: [entryId] }],
+          },
+        },
+      ],
+      text: 'Built the deck.',
+    });
+
+    await request(http)
+      .post('/chat/messages')
+      .set(headers)
+      .send({ content: 'build a deck' })
+      .expect(201);
+
+    const row = await admin.query<{
+      category: string;
+      billable: boolean;
+      tool: string;
+      api_key_id: string | null;
+      output_tokens: number;
+    }>(
+      `select category, billable, tool, api_key_id, output_tokens
+       from metering_events
+       where tenant_id = $1 and person_id = $2
+       order by occurred_at desc limit 1`,
+      [tenantId, ownerId],
+    );
+    expect(row.rows[0]).toMatchObject({
+      category: 'agent_run',
+      billable: true,
+      tool: 'create_deck',
+      api_key_id: null,
+    });
+
+    const billedToday = await admin.query<{ runs: string }>(
+      `select runs from metering_cost_daily
+       where tenant_id = $1 and category = 'agent_run'`,
+      [tenantId],
+    );
+    expect(Number(billedToday.rows[0].runs)).toBeGreaterThanOrEqual(1);
   });
 
   it('files corrections from chat into the drift pipeline', async () => {

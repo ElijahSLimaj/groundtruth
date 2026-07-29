@@ -24,6 +24,7 @@ import (
 	"github.com/attempttechnologies/company-brain/services/ingestion/internal/config"
 	"github.com/attempttechnologies/company-brain/services/ingestion/keys"
 	"github.com/attempttechnologies/company-brain/services/ingestion/notion"
+	"github.com/attempttechnologies/company-brain/services/ingestion/outlook"
 	"github.com/attempttechnologies/company-brain/services/ingestion/runtime"
 	"github.com/attempttechnologies/company-brain/services/ingestion/slack"
 	"github.com/attempttechnologies/company-brain/services/ingestion/store"
@@ -57,19 +58,22 @@ func run(logger *slog.Logger) error {
 	gmailConnector := gmail.New(func(token string) gmail.API { return gmail.NewClient(token) })
 	driveConnector := gdrive.New(func(token string) gdrive.API { return gdrive.NewClient(token) })
 	notionConnector := notion.New(func(token string) notion.API { return notion.NewClient(token) })
+	outlookConnector := outlook.New(func(token string) outlook.API { return outlook.NewClient(token) })
 	runner := &runtime.Runner{
 		Pool: pool,
 		Connectors: map[string]connector.Connector{
-			slack.SourceType:  slackConnector,
-			gmail.SourceType:  gmailConnector,
-			gdrive.SourceType: driveConnector,
-			notion.SourceType: notionConnector,
+			slack.SourceType:   slackConnector,
+			gmail.SourceType:   gmailConnector,
+			gdrive.SourceType:  driveConnector,
+			notion.SourceType:  notionConnector,
+			outlook.SourceType: outlookConnector,
 		},
 		Normalizers: map[string]runtime.Normalizer{
-			slack.SourceType:  slack.Normalizer{},
-			gmail.SourceType:  gmail.Normalizer{},
-			gdrive.SourceType: gdrive.Normalizer{},
-			notion.SourceType: notion.Normalizer{},
+			slack.SourceType:   slack.Normalizer{},
+			gmail.SourceType:   gmail.Normalizer{},
+			gdrive.SourceType:  gdrive.Normalizer{},
+			notion.SourceType:  notion.Normalizer{},
+			outlook.SourceType: outlook.Normalizer{},
 		},
 	}
 	payloads, err := buildPayloadStore(ctx, cfg, pool, logger)

@@ -1,4 +1,5 @@
 import {
+  attributeExcerpts,
   calibrateConfidence,
   decodeTier3,
   resolveTuning,
@@ -43,7 +44,7 @@ describe('decodeTier3', () => {
       drafted_statement: 'Growth is 1799 per month',
       drafted_attributes_json: attributesJson,
       contradiction_description: 'price changed',
-      supporting_excerpts: ['1799 from August'],
+      supporting_excerpts: [{ source_id: 'e1', text: '1799 from August' }],
       confidence: 0.8,
     });
 
@@ -59,6 +60,60 @@ describe('decodeTier3', () => {
   it('returns null for non object attributes', () => {
     expect(decodeTier3(wire('[1, 2]'))).toBeNull();
     expect(decodeTier3(wire('"text"'))).toBeNull();
+  });
+});
+
+describe('Tier3Wire supporting excerpts', () => {
+  it('rejects untagged excerpts, so no excerpt can escape attribution', () => {
+    expect(() =>
+      Tier3Wire.parse({
+        drafted_statement: 'Growth is 1799 per month',
+        drafted_attributes_json: '{}',
+        contradiction_description: 'price changed',
+        supporting_excerpts: ['1799 from August'],
+        confidence: 0.8,
+      }),
+    ).toThrow();
+  });
+});
+
+describe('attributeExcerpts', () => {
+  const chunks = new Map([
+    ['e1', 'chunk-one'],
+    ['e2', 'chunk-two'],
+  ]);
+
+  it('resolves each excerpt to the chunk it was quoted from', () => {
+    expect(
+      attributeExcerpts(
+        [
+          { source_id: 'e2', text: 'quoted from two' },
+          { source_id: 'e1', text: 'quoted from one' },
+        ],
+        chunks,
+      ),
+    ).toEqual([
+      { chunkId: 'chunk-two', text: 'quoted from two' },
+      { chunkId: 'chunk-one', text: 'quoted from one' },
+    ]);
+  });
+
+  it('drops excerpts naming an unknown source rather than failing the draft', () => {
+    expect(
+      attributeExcerpts(
+        [
+          { source_id: 'e9', text: 'hallucinated source' },
+          { source_id: 'e1', text: 'quoted from one' },
+        ],
+        chunks,
+      ),
+    ).toEqual([{ chunkId: 'chunk-one', text: 'quoted from one' }]);
+  });
+
+  it('drops every excerpt when none can be attributed', () => {
+    expect(
+      attributeExcerpts([{ source_id: 'e9', text: 'unattributable' }], chunks),
+    ).toEqual([]);
   });
 });
 
