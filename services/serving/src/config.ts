@@ -24,6 +24,36 @@ export interface ServingConfig {
   chatModel: string;
   internalApiSecret: string | null;
   voyageApiKey: string | null;
+  masterKeyHex: string | null;
+  appUrl: string | null;
+  connectorCredentials: Record<
+    string,
+    { clientId: string; clientSecret: string }
+  >;
+}
+
+const CONNECTOR_CREDENTIAL_KEYS = [
+  'SLACK',
+  'GOOGLE',
+  'MICROSOFT',
+  'NOTION',
+  'HUBSPOT',
+  'LINEAR',
+  'SALESFORCE',
+];
+
+function loadConnectorCredentials(
+  env: NodeJS.ProcessEnv,
+): Record<string, { clientId: string; clientSecret: string }> {
+  const creds: Record<string, { clientId: string; clientSecret: string }> = {};
+  for (const key of CONNECTOR_CREDENTIAL_KEYS) {
+    const clientId = env[`${key}_CLIENT_ID`];
+    const clientSecret = env[`${key}_CLIENT_SECRET`];
+    if (clientId && clientSecret) {
+      creds[key] = { clientId, clientSecret };
+    }
+  }
+  return creds;
 }
 
 export function loadConfig(
@@ -63,5 +93,8 @@ export function loadConfig(
     chatModel: env.CHAT_MODEL ?? 'claude-fable-5',
     internalApiSecret: env.INTERNAL_API_SECRET ?? null,
     voyageApiKey: env.VOYAGE_API_KEY ?? null,
+    masterKeyHex: env.MASTER_KEY ?? null,
+    appUrl: env.APP_URL ?? null,
+    connectorCredentials: loadConnectorCredentials(env),
   };
 }

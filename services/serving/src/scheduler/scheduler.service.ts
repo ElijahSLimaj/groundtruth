@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 
 import { ColdStartService } from '../coldstart/coldstart.service';
+import { OAuthService } from '../connectors/oauth.service';
 import { DatabaseService } from '../database/database.service';
 import { DriftService } from '../drift/drift.service';
 import { GapService } from '../drift/gap.service';
@@ -30,6 +31,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     private readonly tuning: TuningService,
     private readonly coldStart: ColdStartService,
     private readonly slackApp: SlackAppService,
+    private readonly oauth: OAuthService,
     @Inject(SERVING_CONFIG) private readonly config: ServingConfig,
   ) {}
 
@@ -142,6 +144,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async sweepTenant(tenantId: string): Promise<void> {
+    const refreshed = await this.oauth.refreshExpiring(tenantId);
     const drift = await this.drift.runOnce(tenantId);
     const gaps = await this.gap.runOnce(tenantId);
     const coldStart = await this.coldStart.runOnce(tenantId);
@@ -151,6 +154,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
       JSON.stringify({
         event: 'sweep',
         tenant: tenantId,
+        tokens_refreshed: refreshed.refreshed,
         drift,
         gaps,
         cold_start: coldStart,

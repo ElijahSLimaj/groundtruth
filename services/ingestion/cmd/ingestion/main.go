@@ -54,6 +54,15 @@ func run(logger *slog.Logger) error {
 	}
 	defer pool.Close()
 
+	var keyService *keys.Service
+	if cfg.MasterKeyHex != "" {
+		wrapper, err := keys.NewAESWrapper(cfg.MasterKeyHex)
+		if err != nil {
+			return err
+		}
+		keyService = &keys.Service{Pool: pool, Wrapper: wrapper}
+	}
+
 	slackConnector := slack.New(func(token string) slack.API { return slack.NewClient(token) })
 	gmailConnector := gmail.New(func(token string) gmail.API { return gmail.NewClient(token) })
 	driveConnector := gdrive.New(func(token string) gdrive.API { return gdrive.NewClient(token) })
@@ -61,6 +70,7 @@ func run(logger *slog.Logger) error {
 	outlookConnector := outlook.New(func(token string) outlook.API { return outlook.NewClient(token) })
 	runner := &runtime.Runner{
 		Pool: pool,
+		Keys: keyService,
 		Connectors: map[string]connector.Connector{
 			slack.SourceType:   slackConnector,
 			gmail.SourceType:   gmailConnector,
@@ -76,7 +86,7 @@ func run(logger *slog.Logger) error {
 			outlook.SourceType: outlook.Normalizer{},
 		},
 	}
-	payloads, err := buildPayloadStore(ctx, cfg, pool, logger)
+	payloads, err := buildPayloadStore(ctx, cfg, pool, keyService, logger)
 	if err != nil {
 		return err
 	}
@@ -144,16 +154,11 @@ func serveWebhooks(ctx context.Context, logger *slog.Logger, addr string, receiv
 	}
 }
 
-func buildPayloadStore(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger) (store.PayloadStore, error) {
-	if cfg.MasterKeyHex == "" {
+func buildPayloadStore(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, keyService *keys.Service, logger *slog.Logger) (store.PayloadStore, error) {
+	if keyService == nil {
 		logger.Warn("payload encryption disabled, set MASTER_KEY to encrypt at rest")
 		return &store.FSPayloadStore{Root: cfg.PayloadRoot}, nil
 	}
-	wrapper, err := keys.NewAESWrapper(cfg.MasterKeyHex)
-	if err != nil {
-		return nil, err
-	}
-	keyService := &keys.Service{Pool: pool, Wrapper: wrapper}
 
 	var blobs store.BlobStore
 	if cfg.S3Bucket != "" {

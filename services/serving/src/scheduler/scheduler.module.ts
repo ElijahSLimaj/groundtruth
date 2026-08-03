@@ -1,12 +1,13 @@
 import { Module } from '@nestjs/common';
 
 import { ColdStartModule } from '../coldstart/coldstart.module';
+import { ConnectorsModule } from '../connectors/connectors.module';
 import { DriftModule } from '../drift/drift.module';
 import { SlackAppModule } from '../slackapp/slackapp.module';
 import { SchedulerService } from './scheduler.service';
 
 @Module({
-  imports: [DriftModule, ColdStartModule, SlackAppModule],
+  imports: [DriftModule, ColdStartModule, SlackAppModule, ConnectorsModule],
   providers: [SchedulerService],
   exports: [SchedulerService],
 })

@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/attempttechnologies/company-brain/services/ingestion/connector"
+	"github.com/attempttechnologies/company-brain/services/ingestion/keys"
 	"github.com/attempttechnologies/company-brain/services/ingestion/store"
 )
 
@@ -29,6 +30,7 @@ type Runner struct {
 	Pool        *pgxpool.Pool
 	Connectors  map[string]connector.Connector
 	Normalizers map[string]Normalizer
+	Keys        *keys.Service
 }
 
 type CycleResult struct {
@@ -140,6 +142,9 @@ func (r *Runner) resolve(ctx context.Context, connectorID uuid.UUID) (connectorR
 	if err != nil {
 		return connectorRow{}, nil, nil, err
 	}
+	if err := r.injectSecret(ctx, connectorID, &row); err != nil {
+		return connectorRow{}, nil, nil, err
+	}
 	conn, ok := r.Connectors[row.SourceType]
 	if !ok {
 		return connectorRow{}, nil, nil, fmt.Errorf("no connector registered for source type %q", row.SourceType)
@@ -149,6 +154,39 @@ func (r *Runner) resolve(ctx context.Context, connectorID uuid.UUID) (connectorR
 		return connectorRow{}, nil, nil, fmt.Errorf("no normalizer registered for source type %q", row.SourceType)
 	}
 	return row, conn, norm, nil
+}
+
+func (r *Runner) injectSecret(ctx context.Context, connectorID uuid.UUID, row *connectorRow) error {
+	sealed, ok := row.Settings["secret"].(string)
+	if !ok || sealed == "" {
+		return nil
+	}
+	if r.Keys == nil {
+		return fmt.Errorf("connector %s has an encrypted secret but no key service is configured", connectorID)
+	}
+	dataKey, err := r.Keys.DataKey(ctx, row.TenantID)
+	if err != nil {
+		return fmt.Errorf("connector %s data key: %w", connectorID, err)
+	}
+	plain, err := store.OpenConnectorSecret(dataKey, connectorID, sealed)
+	if err != nil {
+		return fmt.Errorf("connector %s decrypt secret: %w", connectorID, err)
+	}
+	var secret struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := json.Unmarshal(plain, &secret); err != nil {
+		return fmt.Errorf("connector %s secret shape: %w", connectorID, err)
+	}
+	if row.Settings == nil {
+		row.Settings = map[string]any{}
+	}
+	row.Settings["token"] = secret.AccessToken
+	if secret.RefreshToken != "" {
+		row.Settings["refresh_token"] = secret.RefreshToken
+	}
+	return nil
 }
 
 func (r *Runner) loadConnector(ctx context.Context, connectorID uuid.UUID) (connectorRow, error) {

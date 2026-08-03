@@ -5,6 +5,7 @@ import { AdminModule } from './admin/admin.module';
 import { CanonModule } from './canon/canon.module';
 import { ChatModule } from './chat/chat.module';
 import { ColdStartModule } from './coldstart/coldstart.module';
+import { ConnectorsModule } from './connectors/connectors.module';
 import { DatabaseModule } from './database/database.module';
 import { DriftModule } from './drift/drift.module';
 import { McpModule } from './mcp/mcp.module';
@@ -22,6 +23,7 @@ import { SlackAppModule } from './slackapp/slackapp.module';
     SchedulerModule,
     McpModule,
     ChatModule,
+    ConnectorsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -2,17 +2,89 @@ package runtime
 
 import (
 	"context"
+	cryptorand "crypto/rand"
+	"encoding/hex"
 	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/attempttechnologies/company-brain/services/ingestion/connector"
 	"github.com/attempttechnologies/company-brain/services/ingestion/internal/testdb"
+	"github.com/attempttechnologies/company-brain/services/ingestion/keys"
 	"github.com/attempttechnologies/company-brain/services/ingestion/store"
 )
+
+func testKeyService(t *testing.T, worker *pgxpool.Pool) *keys.Service {
+	t.Helper()
+	master := make([]byte, 32)
+	if _, err := cryptorand.Read(master); err != nil {
+		t.Fatal(err)
+	}
+	wrapper, err := keys.NewAESWrapper(hex.EncodeToString(master))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &keys.Service{Pool: worker, Wrapper: wrapper}
+}
+
+func TestInjectSecretDecryptsEncryptedConnectorToken(t *testing.T) {
+	worker, admin := testdb.Pools(t)
+	f := testdb.CreateFixture(t, admin)
+	ctx := context.Background()
+
+	keyService := testKeyService(t, worker)
+	dataKey, err := keyService.DataKey(ctx, f.TenantID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := store.SealConnectorSecret(dataKey, f.ConnectorID,
+		[]byte(`{"access_token":"tok-123","refresh_token":"ref-456"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r := &Runner{Pool: worker, Keys: keyService}
+	row := connectorRow{
+		TenantID:   f.TenantID,
+		SourceType: "slack",
+		Settings:   map[string]any{"secret": sealed},
+	}
+	if err := r.injectSecret(ctx, f.ConnectorID, &row); err != nil {
+		t.Fatal(err)
+	}
+	if row.Settings["token"] != "tok-123" {
+		t.Fatalf("expected decrypted access token injected, got %v", row.Settings["token"])
+	}
+	if row.Settings["refresh_token"] != "ref-456" {
+		t.Fatalf("expected refresh token injected, got %v", row.Settings["refresh_token"])
+	}
+}
+
+func TestInjectSecretLeavesPlaintextTokenUntouched(t *testing.T) {
+	worker, _ := testdb.Pools(t)
+	ctx := context.Background()
+	r := &Runner{Pool: worker, Keys: testKeyService(t, worker)}
+	row := connectorRow{Settings: map[string]any{"token": "legacy-plain"}}
+	if err := r.injectSecret(ctx, uuid.New(), &row); err != nil {
+		t.Fatal(err)
+	}
+	if row.Settings["token"] != "legacy-plain" {
+		t.Fatalf("legacy plaintext token must survive, got %v", row.Settings["token"])
+	}
+}
+
+func TestInjectSecretFailsWhenKeyServiceMissing(t *testing.T) {
+	worker, _ := testdb.Pools(t)
+	r := &Runner{Pool: worker}
+	row := connectorRow{Settings: map[string]any{"secret": "not-decryptable"}}
+	if err := r.injectSecret(context.Background(), uuid.New(), &row); err == nil {
+		t.Fatal("an encrypted secret with no key service must error, never silently skip")
+	}
+}
 
 type fakeConnector struct {
 	pages      map[connector.Cursor][]connector.RawItem
