@@ -1,4 +1,4 @@
-# Company Brain
+# Groundtruth
 
 The governed knowledge layer for companies deploying AI. Full product and system specification in [specs/company-brain-full-spec.md](specs/company-brain-full-spec.md).
 
