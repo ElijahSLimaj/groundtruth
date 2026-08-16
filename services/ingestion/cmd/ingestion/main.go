@@ -21,6 +21,7 @@ import (
 	"github.com/attempttechnologies/company-brain/services/ingestion/connector"
 	"github.com/attempttechnologies/company-brain/services/ingestion/gdrive"
 	"github.com/attempttechnologies/company-brain/services/ingestion/gmail"
+	"github.com/attempttechnologies/company-brain/services/ingestion/hubspot"
 	"github.com/attempttechnologies/company-brain/services/ingestion/internal/config"
 	"github.com/attempttechnologies/company-brain/services/ingestion/keys"
 	"github.com/attempttechnologies/company-brain/services/ingestion/notion"
@@ -68,6 +69,7 @@ func run(logger *slog.Logger) error {
 	driveConnector := gdrive.New(func(token string) gdrive.API { return gdrive.NewClient(token) })
 	notionConnector := notion.New(func(token string) notion.API { return notion.NewClient(token) })
 	outlookConnector := outlook.New(func(token string) outlook.API { return outlook.NewClient(token) })
+	hubspotConnector := hubspot.New(func(token string) hubspot.API { return hubspot.NewClient(token) })
 	runner := &runtime.Runner{
 		Pool: pool,
 		Keys: keyService,
@@ -77,6 +79,7 @@ func run(logger *slog.Logger) error {
 			gdrive.SourceType:  driveConnector,
 			notion.SourceType:  notionConnector,
 			outlook.SourceType: outlookConnector,
+			hubspot.SourceType: hubspotConnector,
 		},
 		Normalizers: map[string]runtime.Normalizer{
 			slack.SourceType:   slack.Normalizer{},
@@ -84,6 +87,7 @@ func run(logger *slog.Logger) error {
 			gdrive.SourceType:  gdrive.Normalizer{},
 			notion.SourceType:  notion.Normalizer{},
 			outlook.SourceType: outlook.Normalizer{},
+			hubspot.SourceType: hubspot.Normalizer{},
 		},
 	}
 	payloads, err := buildPayloadStore(ctx, cfg, pool, keyService, logger)
