@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/attempttechnologies/company-brain/services/ingestion/connector"
+	"github.com/attempttechnologies/company-brain/services/ingestion/fathom"
 	"github.com/attempttechnologies/company-brain/services/ingestion/gdrive"
 	"github.com/attempttechnologies/company-brain/services/ingestion/gmail"
 	"github.com/attempttechnologies/company-brain/services/ingestion/hubspot"
@@ -70,6 +71,7 @@ func run(logger *slog.Logger) error {
 	notionConnector := notion.New(func(token string) notion.API { return notion.NewClient(token) })
 	outlookConnector := outlook.New(func(token string) outlook.API { return outlook.NewClient(token) })
 	hubspotConnector := hubspot.New(func(token string) hubspot.API { return hubspot.NewClient(token) })
+	fathomConnector := fathom.New(func(apiKey string) fathom.API { return fathom.NewClient(apiKey) })
 	runner := &runtime.Runner{
 		Pool: pool,
 		Keys: keyService,
@@ -80,6 +82,7 @@ func run(logger *slog.Logger) error {
 			notion.SourceType:  notionConnector,
 			outlook.SourceType: outlookConnector,
 			hubspot.SourceType: hubspotConnector,
+			fathom.SourceType:  fathomConnector,
 		},
 		Normalizers: map[string]runtime.Normalizer{
 			slack.SourceType:   slack.Normalizer{},
@@ -88,6 +91,7 @@ func run(logger *slog.Logger) error {
 			notion.SourceType:  notion.Normalizer{},
 			outlook.SourceType: outlook.Normalizer{},
 			hubspot.SourceType: hubspot.Normalizer{},
+			fathom.SourceType:  fathom.Normalizer{},
 		},
 	}
 	payloads, err := buildPayloadStore(ctx, cfg, pool, keyService, logger)
