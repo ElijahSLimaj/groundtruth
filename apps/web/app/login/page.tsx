@@ -20,13 +20,13 @@ const ERROR_MESSAGES: Record<string, string> = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; provisioned?: string }>;
 }) {
   const viewer = await getViewer();
   if (viewer) {
     redirect('/drift');
   }
-  const { error } = await searchParams;
+  const { error, provisioned } = await searchParams;
   const message = error ? (ERROR_MESSAGES[error] ?? null) : null;
 
   return (
@@ -44,6 +44,14 @@ export default async function LoginPage({
           email link.
         </p>
 
+        {provisioned ? (
+          <p
+            role="status"
+            className="mt-4 rounded-card border border-positive/40 bg-positive/10 px-4 py-3 text-sm text-positive"
+          >
+            Your workspace is ready. Sign in with the email you just used.
+          </p>
+        ) : null}
         {message ? (
           <p
             role="alert"

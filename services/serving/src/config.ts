@@ -30,6 +30,8 @@ export interface ServingConfig {
     string,
     { clientId: string; clientSecret: string }
   >;
+  stripeSecretKey: string | null;
+  stripeWebhookSecret: string | null;
 }
 
 const CONNECTOR_CREDENTIAL_KEYS = [
@@ -96,5 +98,7 @@ export function loadConfig(
     masterKeyHex: env.MASTER_KEY ?? null,
     appUrl: env.APP_URL ?? null,
     connectorCredentials: loadConnectorCredentials(env),
+    stripeSecretKey: env.STRIPE_SECRET_KEY ?? null,
+    stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET ?? null,
   };
 }

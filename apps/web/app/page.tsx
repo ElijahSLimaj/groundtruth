@@ -211,15 +211,18 @@ export default function LandingPage() {
             >
               Pricing
             </a>
-            <button
-              type="button"
-              data-cal-namespace={CAL_NAMESPACE}
-              data-cal-link={CAL_LINK}
-              data-cal-config='{"layout":"month_view"}'
+            <a
+              href="/login"
+              className="text-sm text-ink-secondary hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-action"
+            >
+              Log in
+            </a>
+            <a
+              href="/signup"
               className="rounded-control bg-action px-4 py-2 text-sm font-medium text-void transition-opacity duration-150 hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action"
             >
-              Start a pilot
-            </button>
+              Get started
+            </a>
           </nav>
         </div>
       </header>
