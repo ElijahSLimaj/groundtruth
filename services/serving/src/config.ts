@@ -32,6 +32,7 @@ export interface ServingConfig {
   >;
   stripeSecretKey: string | null;
   stripeWebhookSecret: string | null;
+  stripeMeterEventName: string | null;
 }
 
 const CONNECTOR_CREDENTIAL_KEYS = [
@@ -100,5 +101,6 @@ export function loadConfig(
     connectorCredentials: loadConnectorCredentials(env),
     stripeSecretKey: env.STRIPE_SECRET_KEY ?? null,
     stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET ?? null,
+    stripeMeterEventName: env.STRIPE_METER_EVENT_NAME ?? null,
   };
 }

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AccountModule } from './account/account.module';
 import { AdminModule } from './admin/admin.module';
 import { BillingModule } from './billing/billing.module';
 import { CanonModule } from './canon/canon.module';
@@ -26,6 +27,7 @@ import { SlackAppModule } from './slackapp/slackapp.module';
     ChatModule,
     ConnectorsModule,
     BillingModule,
+    AccountModule,
   ],
   controllers: [AppController],
   providers: [AppService],

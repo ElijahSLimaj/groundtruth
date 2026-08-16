@@ -10,6 +10,7 @@ const NAV = [
   { href: '/canon', label: 'Canon' },
   { href: '/connectors', label: 'Connectors' },
   { href: '/audit', label: 'Audit' },
+  { href: '/settings', label: 'Settings' },
 ];
 
 export default async function AppLayout({

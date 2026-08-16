@@ -194,4 +194,38 @@ export class BillingService {
       );
     });
   }
+
+  async reportDailyUsage(tenantId: string): Promise<{ reported: number }> {
+    if (!this.stripe || !this.config.stripeMeterEventName) {
+      return { reported: 0 };
+    }
+    const row = await this.db.withTenant(tenantId, async (client) => {
+      const tenant = await client.query<{ stripe_customer_id: string | null }>(
+        `select stripe_customer_id from tenants where id = $1`,
+        [tenantId],
+      );
+      const customerId = tenant.rows[0]?.stripe_customer_id ?? null;
+      if (!customerId) {
+        return null;
+      }
+      const usage = await client.query<{ n: string }>(
+        `select count(*) as n from metering_events
+         where billable
+           and occurred_at >= date_trunc('day', now() - interval '1 day')
+           and occurred_at < date_trunc('day', now())`,
+      );
+      return { customerId, count: Number(usage.rows[0].n) };
+    });
+    if (!row || row.count === 0) {
+      return { reported: 0 };
+    }
+    await this.stripe.billing.meterEvents.create({
+      event_name: this.config.stripeMeterEventName,
+      payload: {
+        value: String(row.count),
+        stripe_customer_id: row.customerId,
+      },
+    });
+    return { reported: row.count };
+  }
 }

@@ -6,6 +6,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 
+import { BillingService } from '../billing/billing.service';
 import { ColdStartService } from '../coldstart/coldstart.service';
 import { OAuthService } from '../connectors/oauth.service';
 import { DatabaseService } from '../database/database.service';
@@ -32,6 +33,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     private readonly coldStart: ColdStartService,
     private readonly slackApp: SlackAppService,
     private readonly oauth: OAuthService,
+    private readonly billing: BillingService,
     @Inject(SERVING_CONFIG) private readonly config: ServingConfig,
   ) {}
 
@@ -118,9 +120,15 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
         );
         return result.rows[0].canon_decay_sweep;
       });
-      if (decayed > 0) {
+      const usage = await this.billing.reportDailyUsage(tenantId);
+      if (decayed > 0 || usage.reported > 0) {
         this.logger.log(
-          JSON.stringify({ event: 'decay_sweep', tenant: tenantId, decayed }),
+          JSON.stringify({
+            event: 'decay_sweep',
+            tenant: tenantId,
+            decayed,
+            usage_reported: usage.reported,
+          }),
         );
       }
     });
